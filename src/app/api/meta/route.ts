@@ -3,17 +3,16 @@ import { getDb } from '@/lib/db'
 
 export async function GET() {
   try {
-    const db = getDb()
-    const total    = (db.prepare('SELECT COUNT(*) as c FROM signals').get() as any).c
-    const projects = (db.prepare('SELECT COUNT(DISTINCT proyecto) as c FROM signals').get() as any).c
-    const topics   = (db.prepare('SELECT COUNT(DISTINCT tema) as c FROM signals').get() as any).c
+    const db = await getDb()
 
-    const proyectos = db.prepare('SELECT DISTINCT proyecto FROM signals ORDER BY proyecto').all().map((r: any) => r.proyecto)
-    const temas     = db.prepare('SELECT DISTINCT tema FROM signals ORDER BY tema').all().map((r: any) => r.tema)
-    const stacks    = db.prepare('SELECT stack FROM signals').all()
-      .flatMap((r: any) => { try { return JSON.parse(r.stack) } catch { return [] } })
-      .filter((v, i, a) => v && a.indexOf(v) === i)
-      .sort()
+    const total    = db.exec('SELECT COUNT(*) as c FROM signals')[0]?.values[0][0] || 0
+    const projects = db.exec('SELECT COUNT(DISTINCT proyecto) as c FROM signals')[0]?.values[0][0] || 0
+    const topics   = db.exec('SELECT COUNT(DISTINCT tema) as c FROM signals')[0]?.values[0][0] || 0
+
+    const proyectos = (db.exec('SELECT DISTINCT proyecto FROM signals ORDER BY proyecto')[0]?.values || []).map((r: any[]) => r[0])
+    const temas     = (db.exec('SELECT DISTINCT tema FROM signals ORDER BY tema')[0]?.values || []).map((r: any[]) => r[0])
+    const stackRows = (db.exec('SELECT stack FROM signals')[0]?.values || [])
+    const stacks    = [...new Set(stackRows.flatMap((r: any[]) => { try { return JSON.parse(r[0]) } catch { return [] } }))].sort()
 
     return NextResponse.json({ total, projects, topics, proyectos, temas, stacks })
   } catch (e: any) {

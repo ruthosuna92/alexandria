@@ -1,4 +1,4 @@
-import { getDb } from './index'
+import { getDb, persist } from './index'
 
 const DEFAULT_LEXICON = [
   { id: 'lex_1',  terms: ['therapist','terapeuta','terapista','therapeut','thérapeute'],               domain: 'mental-health', langs: ['en','es','de','fr'] },
@@ -18,28 +18,20 @@ const DEFAULT_LEXICON = [
   { id: 'lex_15', terms: ['extension','extensión','plugin','addon','chrome ext'],                      domain: 'dev',           langs: ['en','es'] },
   { id: 'lex_16', terms: ['template','plantilla','boilerplate'],                                       domain: 'general',       langs: ['en','es'] },
   { id: 'lex_17', terms: ['deployment','despliegue','deploy','subir a producción','release'],          domain: 'dev',           langs: ['en','es'] },
-  { id: 'lex_18', terms: ['hook','custom hook','use','composable'],                                    domain: 'dev',           langs: ['en','es'] },
+  { id: 'lex_18', terms: ['hook','custom hook','composable'],                                          domain: 'dev',           langs: ['en','es'] },
   { id: 'lex_19', terms: ['merge conflict','conflicto de merge','conflicto git'],                      domain: 'dev',           langs: ['en','es'] },
   { id: 'lex_20', terms: ['race condition','condición de carrera','timing issue','async problem'],     domain: 'dev',           langs: ['en','es'] },
 ]
 
-function seed() {
-  const db = getDb()
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO lexicon (id, terms, domain, langs)
-    VALUES (@id, @terms, @domain, @langs)
-  `)
-  const insertMany = db.transaction((rows: typeof DEFAULT_LEXICON) => {
-    for (const row of rows) {
-      insert.run({
-        id: row.id,
-        terms: JSON.stringify(row.terms),
-        domain: row.domain,
-        langs: JSON.stringify(row.langs)
-      })
-    }
-  })
-  insertMany(DEFAULT_LEXICON)
+async function seed() {
+  const db = await getDb()
+  for (const row of DEFAULT_LEXICON) {
+    db.run(
+      `INSERT OR IGNORE INTO lexicon (id, terms, domain, langs) VALUES (?, ?, ?, ?)`,
+      [row.id, JSON.stringify(row.terms), row.domain, JSON.stringify(row.langs)]
+    )
+  }
+  persist(db)
   console.log(`✅ Seeded ${DEFAULT_LEXICON.length} lexicon groups`)
 }
 

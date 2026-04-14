@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db'
+import { getDb, persist } from '@/lib/db'
 
 export interface LexiconGroup {
   id: string
@@ -7,29 +7,31 @@ export interface LexiconGroup {
   langs: string[]
 }
 
-export function getLexicon(): LexiconGroup[] {
-  const db = getDb()
-  const rows = db.prepare('SELECT * FROM lexicon ORDER BY domain, id').all() as any[]
-  return rows.map(r => ({
-    id: r.id,
-    terms: JSON.parse(r.terms),
-    domain: r.domain,
-    langs: JSON.parse(r.langs)
+export async function getLexicon(): Promise<LexiconGroup[]> {
+  const db = await getDb()
+  const res = db.exec('SELECT id, terms, domain, langs FROM lexicon ORDER BY domain, id')
+  if (!res.length) return []
+  return res[0].values.map((row: any[]) => ({
+    id: row[0],
+    terms: JSON.parse(row[1]),
+    domain: row[2],
+    langs: JSON.parse(row[3])
   }))
 }
 
-export function addLexiconGroup(group: Omit<LexiconGroup, 'id'>): LexiconGroup {
-  const db = getDb()
+export async function addLexiconGroup(group: Omit<LexiconGroup, 'id'>): Promise<LexiconGroup> {
+  const db = await getDb()
   const id = 'lex_' + Date.now().toString(36)
-  db.prepare('INSERT INTO lexicon (id, terms, domain, langs) VALUES (?, ?, ?, ?)').run(
-    id, JSON.stringify(group.terms), group.domain, JSON.stringify(group.langs)
-  )
+  db.run('INSERT INTO lexicon (id, terms, domain, langs) VALUES (?, ?, ?, ?)',
+    [id, JSON.stringify(group.terms), group.domain, JSON.stringify(group.langs)])
+  persist(db)
   return { id, ...group }
 }
 
-export function deleteLexiconGroup(id: string) {
-  const db = getDb()
-  db.prepare('DELETE FROM lexicon WHERE id = ?').run(id)
+export async function deleteLexiconGroup(id: string) {
+  const db = await getDb()
+  db.run('DELETE FROM lexicon WHERE id = ?', [id])
+  persist(db)
 }
 
 export function expandWithLexicon(text: string, lexicon: LexiconGroup[]): string {
@@ -37,11 +39,7 @@ export function expandWithLexicon(text: string, lexicon: LexiconGroup[]): string
   const extra: string[] = []
   for (const group of lexicon) {
     const hit = group.terms.some(t => lower.includes(t.toLowerCase()))
-    if (hit) {
-      group.terms.forEach(t => {
-        if (!lower.includes(t.toLowerCase())) extra.push(t)
-      })
-    }
+    if (hit) group.terms.forEach(t => { if (!lower.includes(t.toLowerCase())) extra.push(t) })
   }
   return lower + (extra.length ? ' ' + extra.join(' ') : '')
 }

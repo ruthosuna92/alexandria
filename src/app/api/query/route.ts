@@ -8,68 +8,50 @@ import { vectorize, queryIndex } from '@/lib/vector'
 export async function POST(req: NextRequest) {
   try {
     const { q, proyecto, tema, stack } = await req.json()
-    const db = getDb()
+    const db = await getDb()
     const machineId = getMachineId()
-    const lexicon = getLexicon()
+    const lexicon = await getLexicon()
 
-    let rows: any[] = []
+    let query = 'SELECT id,proyecto,contexto,tema,stack,modelo,skill,encrypted,fecha FROM signals WHERE 1=1'
+    const params: string[] = []
+    if (proyecto) { query += ` AND proyecto = '${proyecto}'` }
+    if (tema)     { query += ` AND tema = '${tema}'` }
+    if (stack)    { query += ` AND stack LIKE '%${stack}%'` }
+    query += ' ORDER BY created_at DESC'
+
+    const res = db.exec(query)
+    const allRows = res.length ? res[0].values.map((row: any[]) => {
+      const r: any = {}
+      res[0].columns.forEach((c: string, i: number) => r[c] = row[i])
+      return r
+    }) : []
+
+    let results = allRows
 
     if (q && q.trim()) {
       const expanded = expandWithLexicon(q, lexicon)
       const vector = await vectorize(expanded)
       const vectorResults = await queryIndex(vector, 20)
-      const vectorIds = vectorResults.map(r => r.id)
+      const tokens = expanded.toLowerCase().split(/\W+/).filter((w: string) => w.length > 2)
 
-      let dbQuery = 'SELECT * FROM signals WHERE 1=1'
-      const params: string[] = []
-      if (proyecto) { dbQuery += ' AND proyecto = ?'; params.push(proyecto) }
-      if (tema)     { dbQuery += ' AND tema = ?';     params.push(tema) }
-      if (stack)    { dbQuery += ' AND stack LIKE ?';  params.push(`%${stack}%`) }
-
-      const allRows = db.prepare(dbQuery).all(...params) as any[]
-
-      const expandedLower = expanded.toLowerCase()
-      const tokens = expandedLower.split(/\W+/).filter(w => w.length > 2)
-
-      rows = allRows
-        .map(r => {
-          const vectorScore = vectorResults.find(v => v.id === r.id)?.score || 0
-          const haystack = [r.proyecto, r.contexto, r.tema, r.stack].join(' ').toLowerCase()
-          let decrypted = ''
-          try { decrypted = decrypt(r.encrypted, machineId).toLowerCase() } catch {}
-          const full = haystack + ' ' + decrypted
-          const txtMatch = tokens.some(t => full.includes(t))
-          const score = txtMatch ? Math.max(vectorScore, 0.3) : vectorScore
-          return { ...r, score, txtMatch }
-        })
-        .filter(r => r.score > 0.05 || r.txtMatch)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 6)
-    } else {
-      let dbQuery = 'SELECT * FROM signals WHERE 1=1'
-      const params: string[] = []
-      if (proyecto) { dbQuery += ' AND proyecto = ?'; params.push(proyecto) }
-      if (tema)     { dbQuery += ' AND tema = ?';     params.push(tema) }
-      if (stack)    { dbQuery += ' AND stack LIKE ?';  params.push(`%${stack}%`) }
-      dbQuery += ' ORDER BY created_at DESC LIMIT 10'
-      rows = db.prepare(dbQuery).all(...params) as any[]
+      results = allRows.map((r: any) => {
+        const vectorScore = vectorResults.find(v => v.id === r.id)?.score || 0
+        const haystack = [r.proyecto, r.contexto, r.tema, r.stack].join(' ').toLowerCase()
+        let decrypted = ''
+        try { decrypted = decrypt(r.encrypted, machineId).toLowerCase() } catch {}
+        const txtMatch = tokens.some((t: string) => (haystack + ' ' + decrypted).includes(t))
+        const score = txtMatch ? Math.max(vectorScore, 0.3) : vectorScore
+        return { ...r, score, txtMatch }
+      })
+      .filter((r: any) => r.score > 0.05 || r.txtMatch)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 6)
     }
 
-    const signals = rows.map(r => {
+    const signals = results.slice(0, 10).map((r: any) => {
       let parsed = {}
       try { parsed = JSON.parse(decrypt(r.encrypted, machineId)) } catch {}
-      return {
-        id: r.id,
-        proyecto: r.proyecto,
-        contexto: r.contexto,
-        tema: r.tema,
-        stack: JSON.parse(r.stack || '[]'),
-        modelo: r.modelo,
-        skill: r.skill,
-        fecha: r.fecha,
-        score: r.score,
-        parsed
-      }
+      return { id: r.id, proyecto: r.proyecto, contexto: r.contexto, tema: r.tema, stack: JSON.parse(r.stack || '[]'), modelo: r.modelo, skill: r.skill, fecha: r.fecha, score: r.score, parsed }
     })
 
     return NextResponse.json({ signals })
