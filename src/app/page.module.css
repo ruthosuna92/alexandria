@@ -1,0 +1,50 @@
+.root { max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; min-height: 100vh; }
+
+.header { display: flex; align-items: baseline; gap: 12px; padding-bottom: 1rem; border-bottom: 0.5px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
+.logo { font-family: 'Crimson Pro', serif; font-size: 28px; font-weight: 300; font-style: italic; color: #c9a84c; letter-spacing: -0.5px; }
+.tagline { font-size: 11px; color: #5a5754; letter-spacing: 0.5px; flex: 1; }
+.stats { display: flex; gap: 12px; font-size: 10px; color: #5a5754; }
+
+.tabs { display: flex; gap: 4px; background: #1a1a1a; border-radius: 8px; padding: 4px; border: 0.5px solid rgba(255,255,255,0.08); }
+.tab { flex: 1; padding: 7px 12px; font-size: 11px; color: #5a5754; background: transparent; border: none; border-radius: 6px; letter-spacing: 0.3px; transition: all 0.15s; }
+.tab:hover { color: #9a9690; }
+.tabActive { background: #242424 !important; color: #e8e6e1 !important; border: 0.5px solid rgba(255,255,255,0.12) !important; }
+
+.panel { display: flex; flex-direction: column; gap: 12px; }
+
+.card { background: #1a1a1a; border: 0.5px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 1rem 1.25rem; }
+
+.label { font-size: 10px; color: #5a5754; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+
+.textarea { width: 100%; font-size: 12px; color: #e8e6e1; background: #0f0f0f; border: 0.5px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px; resize: vertical; line-height: 1.7; outline: none; transition: border-color 0.15s; }
+.textarea:focus { border-color: rgba(201,168,76,0.4); }
+
+.input { width: 100%; font-size: 12px; color: #e8e6e1; background: #0f0f0f; border: 0.5px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 12px; outline: none; transition: border-color 0.15s; }
+.input:focus { border-color: rgba(201,168,76,0.4); }
+
+.select { font-size: 11px; color: #e8e6e1; background: #0f0f0f; border: 0.5px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 7px 10px; outline: none; width: 100%; }
+
+.btn { font-size: 11px; padding: 8px 16px; border-radius: 8px; border: 0.5px solid rgba(255,255,255,0.12); background: transparent; color: #9a9690; letter-spacing: 0.3px; transition: all 0.15s; }
+.btn:hover { background: #242424; color: #e8e6e1; }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btnPrimary { background: #c9a84c22; color: #c9a84c; border-color: #c9a84c44; }
+.btnPrimary:hover { background: #c9a84c33; color: #c9a84c; }
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filterRow { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.filterGroup { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 80px; }
+.filterLabel { font-size: 9px; color: #5a5754; letter-spacing: 0.8px; text-transform: uppercase; }
+
+.codeBlock { background: #0f0f0f; border: 0.5px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; font-size: 11px; line-height: 1.8; color: #9a9690; white-space: pre-wrap; overflow: auto; }
+.contextBlock { background: #0f0f0f; border: 0.5px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; font-size: 10px; line-height: 1.8; color: #9a9690; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+
+.statsGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.statCard { background: #1a1a1a; border-radius: 8px; padding: 12px; text-align: center; border: 0.5px solid rgba(255,255,255,0.06); }
+.statNum { font-size: 22px; font-weight: 500; color: #c9a84c; }
+.statLabel { font-size: 10px; color: #5a5754; margin-top: 2px; }
+
+.empty { text-align: center; padding: 2rem; color: #5a5754; font-size: 11px; line-height: 2; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #c9a84c; color: #0f0f0f; padding: 8px 18px; border-radius: 8px; font-size: 11px; font-weight: 500; z-index: 100; pointer-events: none; letter-spacing: 0.3px; }
