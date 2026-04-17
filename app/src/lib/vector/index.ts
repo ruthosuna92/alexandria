@@ -1,53 +1,43 @@
-import path from 'path'
-import os from 'os'
-import fs from 'fs'
-import { LocalIndex } from 'vectra'
+import OpenAI from 'openai'
 
-const VECTOR_DIR = path.join(os.homedir(), 'Documents', 'alexandria', 'data', 'vectors')
-fs.mkdirSync(VECTOR_DIR, { recursive: true })
+let _openai: OpenAI | null = null
 
-let _index: LocalIndex | null = null
-
-async function getIndex(): Promise<LocalIndex> {
-  if (_index) return _index
-  _index = new LocalIndex(VECTOR_DIR)
-  if (!(await _index.isIndexCreated())) {
-    await _index.createIndex()
-  }
-  return _index
-}
-
-let _pipeline: any = null
-
-async function getEmbedder() {
-  if (_pipeline) return _pipeline
-  const { pipeline } = await import('@xenova/transformers')
-  _pipeline = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2')
-  return _pipeline
+function getOpenAI() {
+  if (_openai) return _openai
+  _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
+  return _openai
 }
 
 export async function vectorize(text: string): Promise<number[]> {
-  const embedder = await getEmbedder()
-  const output = await embedder(text, { pooling: 'mean', normalize: true })
-  return Array.from(output.data) as number[]
+  const openai = getOpenAI()
+  const response = await openai.embeddings.create({
+    model: 'text-embedding-3-small',
+    input: text.slice(0, 8000), // límite seguro
+  })
+  return response.data[0].embedding
 }
 
-export async function addToIndex(id: string, vector: number[], metadata: Record<string, unknown>) {
-  const index = await getIndex()
-  await index.upsertItem({ id, vector, metadata })
-}
+export async function queryIndex(
+  db: ReturnType<typeof import('@/lib/db').getDb>,
+  vector: number[],
+  topK = 6,
+  filters: { proyecto?: string; tema?: string; stack?: string } = {}
+): Promise<Array<{ id: string; score: number }>> {
+  let query = db
+    .rpc('match_signals', {
+      query_embedding: vector,
+      match_count: topK,
+    })
 
-export async function queryIndex(vector: number[], topK = 6): Promise<Array<{ id: string; score: number; metadata: Record<string, unknown> }>> {
-  const index = await getIndex()
-  const results = await index.queryItems(vector, topK)
-  return results.map(r => ({
-    id: r.item.id,
-    score: r.score,
-    metadata: r.item.metadata as Record<string, unknown>
-  }))
-}
+  const { data, error } = await query
+  if (error || !data) return []
 
-export async function deleteFromIndex(id: string) {
-  const index = await getIndex()
-  await index.deleteItem(id)
+  return data
+    .filter((r: any) => {
+      if (filters.proyecto && r.proyecto !== filters.proyecto) return false
+      if (filters.tema && r.tema !== filters.tema) return false
+      if (filters.stack && !JSON.stringify(r.stack).includes(filters.stack)) return false
+      return true
+    })
+    .map((r: any) => ({ id: r.id, score: r.similarity }))
 }

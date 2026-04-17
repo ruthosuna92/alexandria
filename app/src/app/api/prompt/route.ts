@@ -1,15 +1,20 @@
+// prompt/route.ts
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { getLearnedRouting } from '@/lib/learning'
 
 export async function GET() {
   try {
-    const db = await getDb()
+    const db = getDb()
+    const { data: proyData }  = await db.from('signals').select('proyecto')
+    const { data: temaData }  = await db.from('signals').select('tema')
+    const { data: skillData } = await db.from('signals').select('skill').neq('skill', '')
+    const { data: modelData } = await db.from('signals').select('modelo').neq('modelo', '')
 
-    const proyectos = (db.exec('SELECT DISTINCT proyecto FROM signals ORDER BY proyecto')[0]?.values || []).map((r: any[]) => r[0]).filter(Boolean)
-    const temas     = (db.exec('SELECT DISTINCT tema FROM signals ORDER BY tema')[0]?.values || []).map((r: any[]) => r[0]).filter(Boolean)
-    const skills    = (db.exec("SELECT DISTINCT skill FROM signals WHERE skill != '' ORDER BY skill")[0]?.values || []).map((r: any[]) => r[0]).filter(Boolean)
-    const modelos   = (db.exec("SELECT DISTINCT modelo FROM signals WHERE modelo != '' ORDER BY modelo")[0]?.values || []).map((r: any[]) => r[0]).filter(Boolean)
+    const proyectos = [...new Set((proyData||[]).map(r => r.proyecto))].filter(Boolean).sort()
+    const temas     = [...new Set((temaData||[]).map(r => r.tema))].filter(Boolean).sort()
+    const skills    = [...new Set((skillData||[]).map(r => r.skill))].filter(Boolean).sort()
+    const modelos   = [...new Set((modelData||[]).map(r => r.modelo))].filter(Boolean).sort()
 
     const BASE_TEMAS   = ['bug', 'feature', 'arquitectura', 'planning', 'ui', 'otro']
     const BASE_SKILLS  = ['nextjs.md', 'plasmo.md', 'supabase.md', 'clerk.md', 'expo.md']

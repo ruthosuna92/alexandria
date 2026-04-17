@@ -1,4 +1,4 @@
-import { getDb, persist, getModelState, setModelState } from '@/lib/db'
+import { getDb } from '@/lib/db'
 
 export interface FeedbackEntry {
   tipo: 'copy' | 'delete' | 'ignore' | 'view'
@@ -21,77 +21,98 @@ export interface MergeFeedbackEntry {
   usuario_dijo: 'evolucion' | 'distintas' | 'duplicado'
 }
 
+async function getModelState(key: string): Promise<string | null> {
+  const db = getDb()
+  const { data } = await db.from('model_state').select('value').eq('key', key).single()
+  return data?.value ?? null
+}
+
+async function setModelState(key: string, value: string) {
+  const db = getDb()
+  await db.from('model_state').upsert({ key, value, updated_at: new Date().toISOString() })
+}
+
 export async function recordFeedback(entry: FeedbackEntry) {
-  const db = await getDb()
+  const db = getDb()
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
-  db.run(
-    `INSERT INTO feedback (id, tipo, signal_id, query, proyecto, tema, modelo, score_coseno)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, entry.tipo, entry.signal_id, entry.query||'', entry.proyecto||'', entry.tema||'', entry.modelo||'', entry.score_coseno||0]
-  )
-  persist(db)
-  const countRes = db.exec('SELECT COUNT(*) FROM feedback')
-  const count = countRes[0]?.values[0][0] || 0
-  if (Number(count) % 10 === 0) {
-    await learnSynonyms(db)
-    await learnModelRouting(db)
+  await db.from('feedback').insert({
+    id,
+    tipo: entry.tipo,
+    signal_id: entry.signal_id,
+    query: entry.query || '',
+    proyecto: entry.proyecto || '',
+    tema: entry.tema || '',
+    modelo: entry.modelo || '',
+    score_coseno: entry.score_coseno || 0,
+  })
+
+  const { count } = await db.from('feedback').select('*', { count: 'exact', head: true })
+  if (count && Number(count) % 10 === 0) {
+    await learnSynonyms()
+    await learnModelRouting()
   }
 }
 
 export async function recordMergeFeedback(entry: MergeFeedbackEntry) {
-  const db = await getDb()
+  const db = getDb()
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
-  db.run(
-    `INSERT INTO merge_feedback (id, vector_a, vector_b, texto_a, texto_b, score_coseno, proyecto, tema, usuario_dijo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, JSON.stringify(entry.vector_a), JSON.stringify(entry.vector_b),
-     entry.texto_a, entry.texto_b, entry.score_coseno, entry.proyecto||'', entry.tema||'', entry.usuario_dijo]
-  )
-  persist(db)
-  await recalculateThresholds(db)
+  await db.from('merge_feedback').insert({
+    id,
+    vector_a: entry.vector_a,
+    vector_b: entry.vector_b,
+    texto_a: entry.texto_a,
+    texto_b: entry.texto_b,
+    score_coseno: entry.score_coseno,
+    proyecto: entry.proyecto || '',
+    tema: entry.tema || '',
+    usuario_dijo: entry.usuario_dijo,
+  })
+  await recalculateThresholds()
 }
 
 export async function getThresholds(): Promise<{ duplicado: number; evolucion: number }> {
-  const db = await getDb()
-  const raw = getModelState(db, 'thresholds')
+  const raw = await getModelState('thresholds')
   if (raw) { try { return JSON.parse(raw) } catch {} }
   return { duplicado: 0.85, evolucion: 0.50 }
 }
 
-async function recalculateThresholds(db: any) {
-  const res = db.exec('SELECT score_coseno, usuario_dijo FROM merge_feedback ORDER BY fecha DESC LIMIT 100')
-  if (!res.length) return
-  const rows = res[0].values as [number, string][]
-  if (rows.length < 10) return
+async function recalculateThresholds() {
+  const db = getDb()
+  const { data: rows } = await db
+    .from('merge_feedback')
+    .select('score_coseno, usuario_dijo')
+    .order('created_at', { ascending: false })
+    .limit(100)
 
-  const avg = (arr: number[]) => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null
-  const avgDup = avg(rows.filter(r => r[1]==='duplicado').map(r => r[0]))
-  const avgEvo = avg(rows.filter(r => r[1]==='evolucion').map(r => r[0]))
+  if (!rows || rows.length < 10) return
+
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null
+  const avgDup = avg(rows.filter(r => r.usuario_dijo === 'duplicado').map(r => r.score_coseno))
+  const avgEvo = avg(rows.filter(r => r.usuario_dijo === 'evolucion').map(r => r.score_coseno))
   const current = await getThresholds()
 
-  const newThresholds = {
+  await setModelState('thresholds', JSON.stringify({
     duplicado: avgDup ? Math.round(((avgDup + current.duplicado) / 2) * 100) / 100 : current.duplicado,
     evolucion: avgEvo ? Math.round(((avgEvo + current.evolucion) / 2) * 100) / 100 : current.evolucion,
-  }
-  setModelState(db, 'thresholds', JSON.stringify(newThresholds))
-  setModelState(db, 'feedback_count', rows.length.toString())
+  }))
 }
 
-async function learnSynonyms(db: any) {
-  const res = db.exec(`
-    SELECT f.query, s.stack
-    FROM feedback f
-    JOIN signals s ON f.signal_id = s.id
-    WHERE f.tipo = 'copy' AND f.query != ''
-    ORDER BY f.fecha DESC LIMIT 200
-  `)
-  if (!res.length) return
+async function learnSynonyms() {
+  const db = getDb()
+  const { data: rows } = await db
+    .from('feedback')
+    .select('query, signals(stack)')
+    .eq('tipo', 'copy')
+    .neq('query', '')
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (!rows?.length) return
 
   const pairs: Map<string, Set<string>> = new Map()
-  for (const row of res[0].values as string[][]) {
-    const queryTokens = row[0].toLowerCase().split(/\W+/).filter(w => w.length > 3)
-    let stackTerms: string[] = []
-    try { stackTerms = JSON.parse(row[1]||'[]').map((s: string) => s.toLowerCase()) } catch {}
+  for (const row of rows) {
+    const queryTokens = row.query.toLowerCase().split(/\W+/).filter((w: string) => w.length > 3)
+    const stackTerms: string[] = ((row as any).signals?.stack || []).map((s: string) => s.toLowerCase())
     for (const qt of queryTokens) {
       for (const st of stackTerms) {
         if (qt !== st && !qt.includes(st) && !st.includes(qt)) {
@@ -104,50 +125,61 @@ async function learnSynonyms(db: any) {
 
   for (const [, terms] of pairs.entries()) {
     const termsArr = [...terms]
-    const termsJson = JSON.stringify(termsArr).replace(/'/g, "''")
-    const existing = db.exec(`SELECT id, confidence FROM learned_synonyms WHERE terms = '${termsJson}'`)
-    if (existing.length && existing[0].values.length) {
-      db.run(`UPDATE learned_synonyms SET confidence = MIN(confidence + 0.1, 1.0) WHERE terms = '${termsJson}'`)
+    const { data: existing } = await db
+      .from('learned_synonyms')
+      .select('id, confidence')
+      .eq('terms', JSON.stringify(termsArr))
+      .single()
+
+    if (existing) {
+      await db.from('learned_synonyms')
+        .update({ confidence: Math.min(existing.confidence + 0.1, 1.0) })
+        .eq('id', existing.id)
     } else {
-      const id = 'lsyn_' + Date.now().toString(36) + Math.random().toString(36).slice(2,4)
-      db.run(`INSERT OR IGNORE INTO learned_synonyms (id, terms, confidence, source) VALUES ('${id}', '${termsJson}', 0.1, 'behavior')`)
+      const id = 'lsyn_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
+      await db.from('learned_synonyms').upsert({ id, terms: termsArr, confidence: 0.1, source: 'behavior' })
     }
   }
 
-  const highConf = db.exec(`SELECT id, terms FROM learned_synonyms WHERE confidence >= 0.5 AND source = 'behavior'`)
-  if (highConf.length) {
-    for (const row of highConf[0].values as string[][]) {
-      const terms = JSON.parse(row[1])
-      const termsJson = JSON.stringify(terms).replace(/'/g, "''")
-      const exists = db.exec(`SELECT id FROM lexicon WHERE terms = '${termsJson}'`)
-      if (!exists.length || !exists[0].values.length) {
-        const id = 'lex_auto_' + Date.now().toString(36)
-        db.run(`INSERT OR IGNORE INTO lexicon (id, terms, domain, langs, source) VALUES ('${id}', '${termsJson}', 'learned', '[]', 'behavior')`)
-      }
+  const { data: highConf } = await db
+    .from('learned_synonyms')
+    .select('id, terms')
+    .gte('confidence', 0.5)
+    .eq('source', 'behavior')
+
+  for (const row of highConf || []) {
+    const { data: exists } = await db.from('lexicon').select('id').eq('terms', row.terms).single()
+    if (!exists) {
+      const id = 'lex_auto_' + Date.now().toString(36)
+      await db.from('lexicon').insert({ id, terms: row.terms, domain: 'learned', langs: [] })
     }
   }
-  persist(db)
 }
 
-async function learnModelRouting(db: any) {
-  const res = db.exec(`
-    SELECT s.tema, s.modelo, COUNT(*) as uses
-    FROM feedback f JOIN signals s ON f.signal_id = s.id
-    WHERE f.tipo = 'copy' AND s.modelo != ''
-    GROUP BY s.tema, s.modelo ORDER BY uses DESC
-  `)
-  if (!res.length) return
+async function learnModelRouting() {
+  const db = getDb()
+  const { data: rows } = await db
+    .from('feedback')
+    .select('signals(tema, modelo)')
+    .eq('tipo', 'copy')
+
+  if (!rows?.length) return
+
   const routing: Record<string, { modelo: string; uses: number }> = {}
-  for (const row of res[0].values as any[][]) {
-    const [tema, modelo, uses] = row
-    if (!routing[tema] || uses > routing[tema].uses) routing[tema] = { modelo, uses }
+  for (const row of rows) {
+    const { tema, modelo } = (row as any).signals || {}
+    if (!tema || !modelo) continue
+    if (!routing[tema] || routing[tema].uses < 1) {
+      routing[tema] = { modelo, uses: (routing[tema]?.uses || 0) + 1 }
+    } else {
+      routing[tema].uses++
+    }
   }
-  setModelState(db, 'learned_routing', JSON.stringify(routing))
+  await setModelState('learned_routing', JSON.stringify(routing))
 }
 
 export async function getLearnedRouting(): Promise<Record<string, string>> {
-  const db = await getDb()
-  const raw = getModelState(db, 'learned_routing')
+  const raw = await getModelState('learned_routing')
   if (!raw) return {}
   try {
     const parsed = JSON.parse(raw)
@@ -156,11 +188,11 @@ export async function getLearnedRouting(): Promise<Record<string, string>> {
 }
 
 export async function getLearningStats() {
-  const db = await getDb()
-  const feedbackCount = db.exec('SELECT COUNT(*) FROM feedback')[0]?.values[0][0] || 0
-  const mergeCount    = db.exec('SELECT COUNT(*) FROM merge_feedback')[0]?.values[0][0] || 0
-  const synonymsCount = db.exec("SELECT COUNT(*) FROM learned_synonyms WHERE confidence >= 0.5")[0]?.values[0][0] || 0
-  const thresholds    = await getThresholds()
-  const routing       = await getLearnedRouting()
+  const db = getDb()
+  const { count: feedbackCount } = await db.from('feedback').select('*', { count: 'exact', head: true })
+  const { count: mergeCount }    = await db.from('merge_feedback').select('*', { count: 'exact', head: true })
+  const { count: synonymsCount } = await db.from('learned_synonyms').select('*', { count: 'exact', head: true }).gte('confidence', 0.5)
+  const thresholds = await getThresholds()
+  const routing    = await getLearnedRouting()
   return { feedbackCount, mergeCount, synonymsCount, thresholds, routing }
 }

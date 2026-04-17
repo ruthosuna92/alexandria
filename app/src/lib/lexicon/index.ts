@@ -1,4 +1,4 @@
-import { getDb, persist } from '@/lib/db'
+import { getDb } from '@/lib/db'
 
 export interface LexiconGroup {
   id: string
@@ -8,30 +8,34 @@ export interface LexiconGroup {
 }
 
 export async function getLexicon(): Promise<LexiconGroup[]> {
-  const db = await getDb()
-  const res = db.exec('SELECT id, terms, domain, langs FROM lexicon ORDER BY domain, id')
-  if (!res.length) return []
-  return res[0].values.map((row: any[]) => ({
-    id: row[0],
-    terms: JSON.parse(row[1]),
-    domain: row[2],
-    langs: JSON.parse(row[3])
+  const db = getDb()
+  const { data, error } = await db
+    .from('lexicon')
+    .select('id, terms, domain, langs')
+    .order('domain')
+  if (error || !data) return []
+  return data.map(r => ({
+    id: r.id,
+    terms: r.terms as string[],
+    domain: r.domain,
+    langs: r.langs as string[]
   }))
 }
 
 export async function addLexiconGroup(group: Omit<LexiconGroup, 'id'>): Promise<LexiconGroup> {
-  const db = await getDb()
+  const db = getDb()
   const id = 'lex_' + Date.now().toString(36)
-  db.run('INSERT INTO lexicon (id, terms, domain, langs) VALUES (?, ?, ?, ?)',
-    [id, JSON.stringify(group.terms), group.domain, JSON.stringify(group.langs)])
-  persist(db)
+  const { error } = await db
+    .from('lexicon')
+    .insert({ id, terms: group.terms, domain: group.domain, langs: group.langs })
+  if (error) throw new Error(error.message)
   return { id, ...group }
 }
 
 export async function deleteLexiconGroup(id: string) {
-  const db = await getDb()
-  db.run('DELETE FROM lexicon WHERE id = ?', [id])
-  persist(db)
+  const db = getDb()
+  const { error } = await db.from('lexicon').delete().eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
 export function expandWithLexicon(text: string, lexicon: LexiconGroup[]): string {

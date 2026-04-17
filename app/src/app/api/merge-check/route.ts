@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
-import { decrypt } from '@/lib/crypto'
-import { getMachineId } from '@/lib/machine-id'
 import { vectorize } from '@/lib/vector'
 import { getThresholds } from '@/lib/learning'
 
@@ -17,35 +15,33 @@ export async function POST(req: NextRequest) {
     const { proyecto, contexto } = body
     if (!proyecto) return NextResponse.json({ exists: false })
 
-    const db = await getDb()
-    let query = `SELECT id, proyecto, contexto, encrypted FROM signals WHERE proyecto = '${proyecto.replace(/'/g,"''")}' ORDER BY created_at DESC LIMIT 5`
-    if (contexto) {
-      query = `SELECT id, proyecto, contexto, encrypted FROM signals WHERE proyecto = '${proyecto.replace(/'/g,"''")}' AND contexto = '${contexto.replace(/'/g,"''")}' ORDER BY created_at DESC LIMIT 3`
-    }
+    const db = getDb()
+    let query = db
+      .from('signals')
+      .select('id,proyecto,contexto,tema,stack,decisiones,embedding')
+      .eq('proyecto', proyecto)
+      .order('created_at', { ascending: false })
+      .limit(5)
 
-    const res = db.exec(query)
-    if (!res.length || !res[0].values.length) return NextResponse.json({ exists: false })
+    if (contexto) query = query.eq('contexto', contexto)
 
-    const machineId = getMachineId()
+    const { data, error } = await query
+    if (error || !data?.length) return NextResponse.json({ exists: false })
+
     const thresholds = await getThresholds()
-
     const newText = [proyecto, contexto, ...(body.decisiones||[]), ...(body.stack||[])].join(' ')
     const newVector = await vectorize(newText)
 
     const candidates = []
-    for (const row of res[0].values as any[][]) {
-      const [id, proj, ctx, encrypted] = row
-      let parsed: any = {}
-      try { parsed = JSON.parse(decrypt(encrypted, machineId)) } catch {}
-
-      const oldText = [proj, ctx, ...(parsed.decisiones||[]), ...(parsed.stack||[])].join(' ')
-      const oldVector = await vectorize(oldText)
+    for (const r of data) {
+      const oldText = [r.proyecto, r.contexto, ...(r.decisiones||[]), ...(r.stack||[])].join(' ')
+      const oldVector = r.embedding as number[]
       const score = cosineSim(newVector, oldVector)
 
       const decisionsAnalysis = []
       for (const newDec of (body.decisiones||[])) {
         const newDecVec = await vectorize(newDec)
-        for (const oldDec of (parsed.decisiones||[])) {
+        for (const oldDec of (r.decisiones||[])) {
           const oldDecVec = await vectorize(oldDec)
           const decScore = cosineSim(newDecVec, oldDecVec)
           if (decScore > thresholds.evolucion) {
@@ -57,17 +53,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      candidates.push({ id, proyecto: proj, contexto: ctx, score, decisionsAnalysis, parsed })
+      candidates.push({ id: r.id, proyecto: r.proyecto, contexto: r.contexto, score, decisionsAnalysis })
     }
 
-    const best = candidates.sort((a,b) => b.score - a.score)[0]
+    const best = candidates.sort((a, b) => b.score - a.score)[0]
     if (best.score < 0.3) return NextResponse.json({ exists: false })
 
-    return NextResponse.json({
-      exists: true,
-      match: best,
-      thresholds
-    })
+    return NextResponse.json({ exists: true, match: best, thresholds })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

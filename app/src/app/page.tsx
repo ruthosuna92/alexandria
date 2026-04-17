@@ -5,7 +5,11 @@ import styles from './page.module.css'
 type Signal = {
   id: string; proyecto: string; contexto: string; tema: string
   stack: string[]; modelo: string; skill: string; fecha: string
-  score?: number; parsed: Record<string, any>
+  score?: number
+  decisiones?: string[]
+  preferencias?: string[]
+  errores_resueltos?: string[]
+  parsed?: Record<string, any>  // opcional ahora
 }
 type LexiconGroup = { id: string; terms: string[]; domain: string; langs: string[] }
 type Meta = { total: number; projects: number; topics: number; proyectos: string[]; temas: string[]; stacks: string[] }
@@ -46,13 +50,15 @@ function ModelChip({ modelo, skill }: { modelo: string; skill: string }) {
 }
 
 function buildContext(s: Signal): string {
-  const p = s.parsed
+  const decisiones = s.decisiones || s.parsed?.decisiones || []
+  const preferencias = s.preferencias || s.parsed?.preferencias || []
+  const errores = s.errores_resueltos || s.parsed?.errores_resueltos || []
   const lines = [`## Contexto — ${s.proyecto}`]
   if (s.contexto) lines.push(`tarea: ${s.contexto}`)
   if (s.stack?.length) lines.push(`stack: ${s.stack.join(', ')}`)
-  if (p.decisiones?.length) { lines.push(''); lines.push('decisiones:'); p.decisiones.forEach((d: string) => lines.push(`  - ${d}`)) }
-  if (p.preferencias?.length) { lines.push(''); lines.push('preferencias:'); p.preferencias.forEach((x: string) => lines.push(`  - ${x}`)) }
-  if (p.errores_resueltos?.length) { lines.push(''); lines.push('resuelto:'); p.errores_resueltos.forEach((e: string) => lines.push(`  - ${e}`)) }
+  if (decisiones.length) { lines.push(''); lines.push('decisiones:'); decisiones.forEach((d: string) => lines.push(`  - ${d}`)) }
+  if (preferencias.length) { lines.push(''); lines.push('preferencias:'); preferencias.forEach((x: string) => lines.push(`  - ${x}`)) }
+  if (errores.length) { lines.push(''); lines.push('resuelto:'); errores.forEach((e: string) => lines.push(`  - ${e}`)) }
   if (s.modelo) { lines.push(''); lines.push(`modelo: ${s.modelo}`) }
   if (s.skill) lines.push(`skill: ${s.skill}`)
   return lines.join('\n')
