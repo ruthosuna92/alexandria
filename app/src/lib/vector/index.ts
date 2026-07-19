@@ -1,21 +1,4 @@
-import OpenAI from 'openai'
-
-let _openai: OpenAI | null = null
-
-function getOpenAI() {
-  if (_openai) return _openai
-  _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
-  return _openai
-}
-
-export async function vectorize(text: string): Promise<number[]> {
-  const openai = getOpenAI()
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text.slice(0, 8000), // límite seguro
-  })
-  return response.data[0].embedding
-}
+export { vectorize } from './embedding.mjs'
 
 export async function queryIndex(
   db: ReturnType<typeof import('@/lib/db').getDb>,

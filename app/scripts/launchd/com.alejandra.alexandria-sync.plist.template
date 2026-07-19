@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.alejandra.alexandria-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_PATH__</string>
+    <string>__SCRIPT_PATH__</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__WORKDIR__</string>
+
+  <!-- Runs every 5 minutes (300s). Adjust to taste — this is a full-file
+       find-and-replace target, not a computed value. -->
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- launchd-level stdout/stderr (e.g. uncaught crashes before our own logger
+       runs). App-level sync activity is logged separately by scripts/lib/signals-sync.mjs
+       to sync.out.log / sync.err.log in the same directory. -->
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/sync.launchd.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/sync.launchd.err.log</string>
+</dict>
+</plist>

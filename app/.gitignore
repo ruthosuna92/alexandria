@@ -6,3 +6,4 @@ vectors/
 .env.local
 
 .vercel
+*.tsbuildinfo

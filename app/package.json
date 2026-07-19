@@ -6,7 +6,10 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "seed": "tsx src/lib/db/seed.ts"
+    "seed": "tsx src/lib/db/seed.ts",
+    "sync": "node scripts/sync.mjs",
+    "sync:install": "bash scripts/launchd/install.sh",
+    "sync:uninstall": "bash scripts/launchd/uninstall.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
