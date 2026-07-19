@@ -1,8 +1,6 @@
 import { cosineSim, vectorize } from './vector.js'
 import { expandWithLexicon, getLexicon } from './lexicon.js'
 import { getDb } from './db.js'
-import { decrypt } from './crypto.js'
-import { getMachineId } from './machine-id.js'
 import { queryIndex } from './vector.js'
 
 export interface Signal {
@@ -66,7 +64,6 @@ function scoreSignal(signal: Signal, query: string, queryTokens: string[], proye
 
 async function fetchCandidates(subQuery: string, proyecto?: string, tema?: string, stack?: string): Promise<Array<Signal & { vectorScore: number; compositeScore: number }>> {
   const db = await getDb()
-  const machineId = getMachineId()
   const lexicon = await getLexicon()
 
   const expanded = expandWithLexicon(subQuery, lexicon)
@@ -74,12 +71,13 @@ async function fetchCandidates(subQuery: string, proyecto?: string, tema?: strin
   const vectorResults = await queryIndex(qvec, 15)
 
   let dbQuery = 'SELECT id,proyecto,contexto,tema,stack,modelo,skill,encrypted,fecha FROM signals WHERE 1=1'
-  if (proyecto) dbQuery += ` AND proyecto = '${proyecto.replace(/'/g,"''")}'`
-  if (tema)     dbQuery += ` AND tema = '${tema.replace(/'/g,"''")}'`
-  if (stack)    dbQuery += ` AND stack LIKE '%${stack.replace(/'/g,"''")}%'`
+  const dbParams: string[] = []
+  if (proyecto) { dbQuery += ' AND proyecto = ?'; dbParams.push(proyecto) }
+  if (tema)     { dbQuery += ' AND tema = ?';     dbParams.push(tema) }
+  if (stack)    { dbQuery += ' AND stack LIKE ?'; dbParams.push(`%${stack}%`) }
   dbQuery += ' ORDER BY created_at DESC'
 
-  const res = db.exec(dbQuery)
+  const res = db.exec(dbQuery, dbParams)
   if (!res.length) return []
 
   const tokens = expanded.toLowerCase().split(/\W+/).filter((w: string) => w.length > 2)
@@ -87,7 +85,7 @@ async function fetchCandidates(subQuery: string, proyecto?: string, tema?: strin
   return res[0].values.map((row: any[]) => {
     const [id, proj, ctx, t, st, mod, sk, enc, fecha] = row
     let parsed: any = {}
-    try { parsed = JSON.parse(decrypt(enc, machineId)) } catch {}
+    try { parsed = JSON.parse(enc) } catch {}
 
     const signal: Signal = {
       id, proyecto: proj, contexto: ctx, tema: t,

@@ -1,6 +1,4 @@
-import { getDb, persist } from '../lib/db.js'
-import { encrypt } from '../lib/crypto.js'
-import { getMachineId } from '../lib/machine-id.js'
+import { getDb, withFreshDb } from '../lib/db.js'
 import { getLexicon, expandWithLexicon } from '../lib/lexicon.js'
 import { vectorize, addToIndex } from '../lib/vector.js'
 import { maybeGenerateOverview } from '../lib/overview.js'
@@ -26,7 +24,6 @@ export const saveTool = {
 }
 
 export async function handleSave(args: any) {
-  const machineId = getMachineId()
   const lexicon   = await getLexicon()
 
   const textForVector = expandWithLexicon(
@@ -45,24 +42,24 @@ export async function handleSave(args: any) {
 
   const vector    = await vectorize(textForVector)
   const id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-  const encrypted = encrypt(JSON.stringify(args), machineId)
+  const encrypted = JSON.stringify(args)
   const fecha     = new Date().toLocaleDateString('es-CO')
-  const db        = await getDb()
 
-  db.run(
-    `INSERT INTO signals (id,proyecto,contexto,tema,stack,modelo,skill,encrypted,vector_id,fecha)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [id, args.proyecto, args.contexto||'', args.tema||'otro',
-     JSON.stringify(args.stack||[]), args.modelo_sugerido||'',
-     args.skill_sugerida||'', encrypted, id, fecha]
-  )
-  persist(db)
+  await withFreshDb(db => {
+    db.run(
+      `INSERT INTO signals (id,proyecto,contexto,tema,stack,modelo,skill,encrypted,vector_id,fecha)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [id, args.proyecto, args.contexto||'', args.tema||'otro',
+       JSON.stringify(args.stack||[]), args.modelo_sugerido||'',
+       args.skill_sugerida||'', encrypted, id, fecha]
+    )
+  })
   await addToIndex(id, vector, { proyecto: args.proyecto, contexto: args.contexto, tema: args.tema })
 
   await maybeGenerateOverview(args.proyecto)
 
   const db2 = await getDb()
-  const countRes = db2.exec(`SELECT COUNT(*) FROM signals WHERE proyecto = '${args.proyecto.replace(/'/g,"''")}' AND contexto != 'overview'`)
+  const countRes = db2.exec(`SELECT COUNT(*) FROM signals WHERE proyecto = ? AND contexto != 'overview'`, [args.proyecto])
   const total = Number(countRes[0]?.values[0][0] || 0)
   const overviewMsg = total % 3 === 0 ? `\n🔄 Overview de ${args.proyecto} actualizado automáticamente` : ''
 

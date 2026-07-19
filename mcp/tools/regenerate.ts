@@ -4,7 +4,7 @@ import { getDb } from '../lib/db.js'
 export async function handleRegenerate(args: { proyecto: string }) {
   const db = await getDb()
 
-  const countRes = db.exec(`SELECT COUNT(*) FROM signals WHERE proyecto = '${args.proyecto.replace(/'/g,"''")}' AND contexto != 'overview'`)
+  const countRes = db.exec(`SELECT COUNT(*) FROM signals WHERE proyecto = ? AND contexto != 'overview'`, [args.proyecto])
   const count = Number(countRes[0]?.values[0][0] || 0)
 
   if (count === 0) {

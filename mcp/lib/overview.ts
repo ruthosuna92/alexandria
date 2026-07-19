@@ -1,18 +1,15 @@
-import { getDb, persist } from './db.js'
-import { decrypt, encrypt } from './crypto.js'
-import { getMachineId } from './machine-id.js'
+import { getDb, withFreshDb } from './db.js'
 import { getLexicon, expandWithLexicon } from './lexicon.js'
-import { vectorize, addToIndex, deleteFromIndex } from './vector.js'
+import { vectorize, addToIndex } from './vector.js'
 
 export async function maybeGenerateOverview(proyecto: string) {
   const db = await getDb()
-  const machineId = getMachineId()
 
   const countRes = db.exec(`
-    SELECT COUNT(*) FROM signals 
-    WHERE proyecto = '${proyecto.replace(/'/g,"''")}' 
+    SELECT COUNT(*) FROM signals
+    WHERE proyecto = ?
     AND (contexto != 'overview' OR contexto IS NULL)
-  `)
+  `, [proyecto])
   const count = Number(countRes[0]?.values[0][0] || 0)
 
   if (count < 3 || count % 3 !== 0) return
@@ -22,15 +19,14 @@ export async function maybeGenerateOverview(proyecto: string) {
 
 export async function generateOverview(proyecto: string) {
   const db = await getDb()
-  const machineId = getMachineId()
 
   const res = db.exec(`
     SELECT encrypted FROM signals
-    WHERE proyecto = '${proyecto.replace(/'/g,"''")}' 
+    WHERE proyecto = ?
     AND contexto != 'overview'
     ORDER BY created_at DESC
     LIMIT 30
-  `)
+  `, [proyecto])
 
   if (!res.length || !res[0].values.length) return
 
@@ -44,7 +40,7 @@ export async function generateOverview(proyecto: string) {
 
   for (const row of res[0].values as any[][]) {
     let parsed: any = {}
-    try { parsed = JSON.parse(decrypt(row[0], machineId)) } catch { continue }
+    try { parsed = JSON.parse(row[0]) } catch { continue }
 
     if (parsed.tema)              allTemas.add(parsed.tema)
     if (parsed.modelo_sugerido)   allModelos.set(parsed.modelo_sugerido, (allModelos.get(parsed.modelo_sugerido)||0) + 1)
@@ -87,31 +83,36 @@ export async function generateOverview(proyecto: string) {
   )
   const vector = await vectorize(textForVector)
 
-  const existing = db.exec(`
-    SELECT id FROM signals 
-    WHERE proyecto = '${proyecto.replace(/'/g,"''")}' 
-    AND contexto = 'overview'
-  `)
+  const encrypted = JSON.stringify(overviewSignal)
+  const stackJson = JSON.stringify([...allStack])
 
-  if (existing.length && existing[0].values.length) {
-    const existingId = existing[0].values[0][0] as string
-    const encrypted = encrypt(JSON.stringify(overviewSignal), getMachineId())
-    db.run(
-      `UPDATE signals SET encrypted = ?, stack = ?, modelo = ?, skill = ?, created_at = strftime('%s','now') WHERE id = ?`,
-      [encrypted, JSON.stringify([...allStack]), topModelo, topSkill, existingId]
-    )
-    persist(db)
-    await addToIndex(existingId, vector, { proyecto, contexto: 'overview', tipo: 'overview' })
-  } else {
+  // The existence check runs inside the lock so a concurrent regeneration from
+  // the other MCP process can't race us into inserting a duplicate overview row.
+  const overviewId = await withFreshDb(freshDb => {
+    const existing = freshDb.exec(`
+      SELECT id FROM signals
+      WHERE proyecto = ?
+      AND contexto = 'overview'
+    `, [proyecto])
+
+    if (existing.length && existing[0].values.length) {
+      const existingId = existing[0].values[0][0] as string
+      freshDb.run(
+        `UPDATE signals SET encrypted = ?, stack = ?, modelo = ?, skill = ?, created_at = strftime('%s','now') WHERE id = ?`,
+        [encrypted, stackJson, topModelo, topSkill, existingId]
+      )
+      return existingId
+    }
+
     const id = 'ov_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
-    const encrypted = encrypt(JSON.stringify(overviewSignal), getMachineId())
     const fecha = new Date().toLocaleDateString('es-CO')
-    db.run(
+    freshDb.run(
       `INSERT INTO signals (id,proyecto,contexto,tema,stack,modelo,skill,encrypted,vector_id,fecha)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, proyecto, 'overview', 'arquitectura', JSON.stringify([...allStack]), topModelo, topSkill, encrypted, id, fecha]
+      [id, proyecto, 'overview', 'arquitectura', stackJson, topModelo, topSkill, encrypted, id, fecha]
     )
-    persist(db)
-    await addToIndex(id, vector, { proyecto, contexto: 'overview', tipo: 'overview' })
-  }
+    return id
+  })
+
+  await addToIndex(overviewId, vector, { proyecto, contexto: 'overview', tipo: 'overview' })
 }
