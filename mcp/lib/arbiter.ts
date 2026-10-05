@@ -108,20 +108,22 @@ export async function runArbiter(q: string, proyecto?: string, tema?: string, st
 
     const bestA = candidatesA[0]
     const bestB = candidatesB[0]
+    const isRelevantA = !!bestA && bestA.compositeScore >= 0.35
+    const isRelevantB = !!bestB && bestB.compositeScore >= 0.35
 
-    if (!bestA && !bestB) {
+    if (!isRelevantA && !isRelevantB) {
       return { mode: 'none', signals: [], reason: 'no hay contexto relevante para ninguna parte de la query', context: '' }
     }
 
-    if (!bestA || bestA.compositeScore < 0.35) {
+    if (!isRelevantA) {
       return {
-        mode: 'single', signals: [bestB!],
+        mode: 'single', signals: [bestB],
         reason: `query compuesta pero solo encontré contexto para "${parts[1]}"`,
-        context: buildContextBlock(bestB!)
+        context: buildContextBlock(bestB)
       }
     }
 
-    if (!bestB || bestB.compositeScore < 0.35) {
+    if (!isRelevantB) {
       return {
         mode: 'single', signals: [bestA],
         reason: `query compuesta pero solo encontré contexto para "${parts[0]}"`,
