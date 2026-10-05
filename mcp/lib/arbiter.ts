@@ -1,19 +1,8 @@
-import { cosineSim, vectorize } from './vector.js'
-import { expandWithLexicon, getLexicon } from './lexicon.js'
-import { getDb } from './db.js'
-import { queryIndex } from './vector.js'
+import { cosineSim, embed } from './embedding.js'
+import { expandWithLexicon } from './lexicon.js'
+import { getLexicon, listSignals, searchSignals, SignalRow } from './signals-repo.js'
 
-export interface Signal {
-  id: string
-  proyecto: string
-  contexto: string
-  tema: string
-  stack: string[]
-  modelo: string
-  skill: string
-  fecha: string
-  parsed: Record<string, any>
-}
+export type Signal = SignalRow
 
 export interface ArbiterResult {
   mode: 'single' | 'combined' | 'none'
@@ -45,7 +34,7 @@ function detectCompoundQuery(q: string): { isCompound: boolean; parts: string[] 
 function scoreSignal(signal: Signal, query: string, queryTokens: string[], proyecto?: string, tema?: string, stack?: string): number {
   let score = 0
 
-  const hay = [signal.proyecto, signal.contexto, signal.tema, ...signal.stack, ...(signal.parsed.decisiones||[])].join(' ').toLowerCase()
+  const hay = [signal.proyecto, signal.contexto, signal.tema, ...signal.stack, ...signal.decisiones].join(' ').toLowerCase()
   const textMatch = queryTokens.filter(t => hay.includes(t)).length / (queryTokens.length || 1)
   score += textMatch * 0.25
 
@@ -54,7 +43,7 @@ function scoreSignal(signal: Signal, query: string, queryTokens: string[], proye
   if (stack && signal.stack.some(s => s.toLowerCase().includes(stack.toLowerCase()))) score += 0.05
 
   const now = Date.now()
-  const signalDate = new Date(signal.fecha.split('/').reverse().join('-')).getTime() || now
+  const signalDate = new Date(signal.created_at).getTime() || now
   const daysDiff = Math.max(0, (now - signalDate) / (1000 * 60 * 60 * 24))
   const recency = Math.max(0, 1 - daysDiff / 90)
   score += recency * 0.05
@@ -63,56 +52,39 @@ function scoreSignal(signal: Signal, query: string, queryTokens: string[], proye
 }
 
 async function fetchCandidates(subQuery: string, proyecto?: string, tema?: string, stack?: string): Promise<Array<Signal & { vectorScore: number; compositeScore: number }>> {
-  const db = await getDb()
   const lexicon = await getLexicon()
 
   const expanded = expandWithLexicon(subQuery, lexicon)
-  const qvec = await vectorize(expanded)
-  const vectorResults = await queryIndex(qvec, 15)
-
-  let dbQuery = 'SELECT id,proyecto,contexto,tema,stack,modelo,skill,encrypted,fecha FROM signals WHERE 1=1'
-  const dbParams: string[] = []
-  if (proyecto) { dbQuery += ' AND proyecto = ?'; dbParams.push(proyecto) }
-  if (tema)     { dbQuery += ' AND tema = ?';     dbParams.push(tema) }
-  if (stack)    { dbQuery += ' AND stack LIKE ?'; dbParams.push(`%${stack}%`) }
-  dbQuery += ' ORDER BY created_at DESC'
-
-  const res = db.exec(dbQuery, dbParams)
-  if (!res.length) return []
+  const qvec = await embed(expanded)
+  const [vectorResults, signals] = await Promise.all([
+    searchSignals(qvec, 15),
+    listSignals({ proyecto, tema, stack }),
+  ])
+  if (!signals.length) return []
 
   const tokens = expanded.toLowerCase().split(/\W+/).filter((w: string) => w.length > 2)
 
-  return res[0].values.map((row: any[]) => {
-    const [id, proj, ctx, t, st, mod, sk, enc, fecha] = row
-    let parsed: any = {}
-    try { parsed = JSON.parse(enc) } catch {}
-
-    const signal: Signal = {
-      id, proyecto: proj, contexto: ctx, tema: t,
-      stack: JSON.parse(st || '[]'), modelo: mod, skill: sk, fecha, parsed
-    }
-
-    const vectorScore = vectorResults.find(v => v.id === id)?.score || 0
+  return signals.map(signal => {
+    const vectorScore = vectorResults.find(v => v.id === signal.id)?.score || 0
     const textScore   = scoreSignal(signal, subQuery, tokens, proyecto, tema, stack)
     const compositeScore = vectorScore * 0.35 + textScore
 
     return { ...signal, vectorScore, compositeScore }
   })
-  .filter((s: any) => s.compositeScore > 0.10 || s.vectorScore > 0.30)
-  .sort((a: any, b: any) => b.compositeScore - a.compositeScore)
+  .filter(s => s.compositeScore > 0.10 || s.vectorScore > 0.30)
+  .sort((a, b) => b.compositeScore - a.compositeScore)
   .slice(0, 8)
 }
 
 function buildContextBlock(signal: Signal, label?: string): string {
-  const p = signal.parsed
   const lines: string[] = []
   if (label) lines.push(`### ${label}`)
   lines.push(`## Contexto — ${signal.proyecto}`)
   if (signal.contexto) lines.push(`tarea: ${signal.contexto}`)
   if (signal.stack?.length) lines.push(`stack: ${signal.stack.join(', ')}`)
-  if (p.decisiones?.length)       { lines.push(''); lines.push('decisiones:');    p.decisiones.forEach((d: string) => lines.push(`  - ${d}`)) }
-  if (p.preferencias?.length)     { lines.push(''); lines.push('preferencias:');  p.preferencias.forEach((x: string) => lines.push(`  - ${x}`)) }
-  if (p.errores_resueltos?.length){ lines.push(''); lines.push('resuelto:');      p.errores_resueltos.forEach((e: string) => lines.push(`  - ${e}`)) }
+  if (signal.decisiones?.length)       { lines.push(''); lines.push('decisiones:');    signal.decisiones.forEach(d => lines.push(`  - ${d}`)) }
+  if (signal.preferencias?.length)     { lines.push(''); lines.push('preferencias:');  signal.preferencias.forEach(x => lines.push(`  - ${x}`)) }
+  if (signal.errores_resueltos?.length){ lines.push(''); lines.push('resuelto:');      signal.errores_resueltos.forEach(e => lines.push(`  - ${e}`)) }
   if (signal.modelo) { lines.push(''); lines.push(`modelo: ${signal.modelo}`) }
   if (signal.skill)  lines.push(`skill: ${signal.skill}`)
   return lines.join('\n')
@@ -158,8 +130,7 @@ export async function runArbiter(q: string, proyecto?: string, tema?: string, st
       }
     }
 
-    const vecA = await vectorize(parts[0])
-    const vecB = await vectorize(parts[1])
+    const [vecA, vecB] = await Promise.all([embed(parts[0]), embed(parts[1])])
     const similarity = cosineSim(vecA, vecB)
 
     if (similarity > 0.40) {
@@ -201,10 +172,11 @@ export async function runArbiter(q: string, proyecto?: string, tema?: string, st
     }
   }
 
-  const simBetween = cosineSim(
-    await vectorize([best.proyecto, best.contexto, ...(best.parsed.decisiones||[])].join(' ')),
-    await vectorize([second.proyecto, second.contexto, ...(second.parsed.decisiones||[])].join(' '))
-  )
+  const [vecBest, vecSecond] = await Promise.all([
+    embed([best.proyecto, best.contexto, ...best.decisiones].join(' ')),
+    embed([second.proyecto, second.contexto, ...second.decisiones].join(' ')),
+  ])
+  const simBetween = cosineSim(vecBest, vecSecond)
 
   if (simBetween > 0.40) {
     return {
