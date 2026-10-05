@@ -1,7 +1,5 @@
-// Single source of truth for the OpenAI embedding pipeline, shared between the
-// app's query-side vectorize (src/lib/vector/index.ts) and the sync scripts'
-// stored embeddings (scripts/lib/signals-sync.mjs). Plain .mjs so both the
-// Next.js build and the node-run scripts can import it.
+// OpenAI embedding pipeline for the app. The MCP server has its own copy in
+// mcp/lib/embedding.ts and both write to the same Supabase table.
 //
 // The model and truncation MUST stay identical on both sides: pgvector
 // similarity between a query vector and stored vectors is only meaningful when
