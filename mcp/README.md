@@ -1,9 +1,12 @@
 # 🏛️ Alexandria MCP Server
 
-MCP server para Alexandria. Expone tres tools:
+MCP server para Alexandria. Lee y escribe directamente en la misma base de Supabase que usa la app, con embeddings de OpenAI (`text-embedding-3-small`).
+
+Expone cuatro tools:
 - `alexandria_query` — busca contexto con árbitro de ranking
 - `alexandria_save` — guarda signals desde el chat
 - `alexandria_suggest_model` — sugiere modelo y skill
+- `alexandria_regenerate_overview` — regenera el overview de un proyecto
 
 ## Setup
 
@@ -13,18 +16,45 @@ npm install
 npm run build
 ```
 
+## Variables de entorno
+
+El server no lee ningún `.env`: las variables se pasan en el bloque `env` de la config del cliente MCP.
+
+| Variable | Valor |
+|---|---|
+| `SUPABASE_URL` | URL del proyecto de Supabase (la misma que `NEXT_PUBLIC_SUPABASE_URL` de la app) |
+| `SUPABASE_SERVICE_KEY` | Service role key de Supabase |
+| `OPENAI_API_KEY` | API key de OpenAI, para los embeddings |
+
+Si falta alguna, la tool responde con un error que dice cuál.
+
 ## Configuración por cliente
+
+### Claude Code
+
+```bash
+claude mcp add alexandria \
+  -e SUPABASE_URL=... \
+  -e SUPABASE_SERVICE_KEY=... \
+  -e OPENAI_API_KEY=... \
+  -- node /Users/TU_USUARIO/alexandria/mcp/dist/index.js
+```
 
 ### Claude Desktop
 
-Edita `%APPDATA%\Claude\claude_desktop_config.json` (Windows) o `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac):
+Edita `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "alexandria": {
       "command": "node",
-      "args": ["C:/Users/TU_USUARIO/Documents/alexandria/mcp/dist/index.js"]
+      "args": ["/Users/TU_USUARIO/alexandria/mcp/dist/index.js"],
+      "env": {
+        "SUPABASE_URL": "...",
+        "SUPABASE_SERVICE_KEY": "...",
+        "OPENAI_API_KEY": "..."
+      }
     }
   }
 }
@@ -32,27 +62,7 @@ Edita `%APPDATA%\Claude\claude_desktop_config.json` (Windows) o `~/Library/Appli
 
 ### Gemini CLI
 
-Edita `~/.gemini/settings.json`:
-
-```json
-{
-  "mcpServers": [
-    {
-      "name": "alexandria",
-      "command": "node",
-      "args": ["/Users/TU_USUARIO/Documents/alexandria/mcp/dist/index.js"]
-    }
-  ]
-}
-```
-
-### ChatGPT (requiere ngrok)
-
-```bash
-# 1. Instala ngrok: https://ngrok.com
-# 2. El MCP server necesita modo HTTP para ChatGPT
-# (próximamente — requiere adapter HTTP adicional)
-```
+Edita `~/.gemini/settings.json` con el mismo `command`, `args` y `env`.
 
 ## Uso en el chat
 
@@ -71,5 +81,13 @@ Edita `~/.gemini/settings.json`:
 
 El árbitro analiza la query y decide:
 - **single** — un ganador claro, entrega ese solo
-- **combined** — query compuesta con dos temas distintos, entrega máximo 2
+- **combined** — query compuesta con dos temas distintos (unidos por "y", "and", "además"…), entrega máximo 2
 - **none** — score bajo, no inyecta contexto
+
+## Overviews
+
+Cada 3 signals de un proyecto se regenera automáticamente su overview: una fila en `signals` con `contexto = 'overview'` que resume stack, decisiones y preferencias. También se puede regenerar a mano con `alexandria_regenerate_overview`.
+
+## Nombres de proyecto
+
+Al guardar, el nombre del proyecto se compara sin distinguir mayúsculas contra los existentes: si ya existe "Spybee", `spybee` se guarda como "Spybee".

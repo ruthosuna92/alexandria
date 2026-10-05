@@ -2,27 +2,27 @@
 
 > AI context that compounds instead of evaporating.
 
-Alexandria is a local-first RAG system I built to solve a real problem: every AI conversation starts from zero. The reasoning, decisions, and context from hundreds of previous sessions just disappear.
+Alexandria is a personal RAG system I built to solve a real problem: every AI conversation starts from zero. The reasoning, decisions, and context from hundreds of previous sessions just disappear.
 
-I built this for myself. It lives on my machine, indexes my AI conversations, and makes them queryable — semantically, across languages, in milliseconds.
+I built this for myself. It indexes my AI conversations in my own Supabase project and makes them queryable — semantically, across languages, from any device.
 
 ---
 
 ## How it works
 
 1. **Capture** — At the end of any Claude, ChatGPT, or Gemini session, a prompt template extracts structured signals (decisions, patterns, context) as JSON.
-2. **Vectorize** — The signals are embedded using multilingual sentence transformers and stored in a local vector index alongside a SQLite database.
+2. **Vectorize** — The signals are embedded with OpenAI `text-embedding-3-small` and stored in Supabase Postgres with pgvector.
 3. **Query** — A hybrid search (text + semantic) retrieves the most relevant context. A ranking arbiter decides whether to return one result, combine two, or return nothing (low confidence).
 4. **Inject** — The retrieved context block gets pasted into the next session, giving the model memory of past reasoning.
-5. **MCP Server** — A connected MCP server exposes three tools (`alexandria_query`, `alexandria_save`, `alexandria_suggest_model`) so Claude Desktop and Gemini CLI can query Alexandria directly mid-conversation.
+5. **MCP Server** — A connected MCP server exposes four tools (`alexandria_query`, `alexandria_save`, `alexandria_suggest_model`, `alexandria_regenerate_overview`) so Claude Code, Claude Desktop and Gemini CLI can query and save to Alexandria directly mid-conversation.
 
 ---
 
 ## Architecture decisions
 
-**Local-first by design.** No cloud dependency, no API keys for the core loop. Embeddings run locally via `paraphrase-multilingual-MiniLM-L12-v2` (Xenova/transformers). Vector index persists to disk via Vectra. Database is SQLite via better-sqlite3.
+**One source of truth.** The web app and the MCP server read and write the same Supabase database. An earlier version kept a local SQLite + vector index on disk and synced it to Supabase; two copies of the data meant they drifted, so the MCP now talks to Supabase directly.
 
-**Machine-bound encryption.** Stored signals are encrypted with AES-256-GCM keyed to the machine ID. This is intentional — the data is personal context, and I wanted it to be meaningless if the files were copied elsewhere.
+**One embedding model.** Both sides embed with the same OpenAI model and truncation. pgvector similarity is only meaningful when query and stored vectors come from the same model, so both copies carry a comment saying they must stay in sync.
 
 **Multilingual from the start.** The lexicon covers 20 semantic groups across Spanish and English. Queries work in either language or mixed.
 
@@ -35,47 +35,50 @@ I built this for myself. It lives on my machine, indexes my AI conversations, an
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 14, TypeScript, React |
-| API | Next.js API routes (7 endpoints) |
-| Vector search | Vectra (local disk), multilingual embeddings |
-| Database | SQLite via better-sqlite3 |
-| Encryption | AES-256-GCM, machine-ID keyed |
-| MCP Server | Node.js, 3 tools |
-| AI integrations | Claude Desktop, Gemini CLI |
+| API | Next.js API routes |
+| Database | Supabase (Postgres) |
+| Vector search | pgvector (`match_signals` RPC) |
+| Embeddings | OpenAI `text-embedding-3-small` |
+| MCP Server | Node.js, 4 tools, stdio |
+| AI integrations | Claude Code, Claude Desktop, Gemini CLI |
 
 ---
 
 ## API surface
-GET  /api/query        → hybrid semantic search
 
-POST /api/signals      → ingest and vectorize new signals
+```
+POST   /api/query        → hybrid semantic search
+POST   /api/gpt/query    → same search for ChatGPT actions (bearer auth)
+GET    /api/signals      → list signals
+POST   /api/signals      → ingest and vectorize a new signal
+DELETE /api/signals      → delete a signal
+GET    /api/lexicon      → multilingual semantic groups (also POST / DELETE)
+GET    /api/prompt       → generate capture prompt for AI sessions
+POST   /api/merge-check  → deduplication before save
+GET    /api/meta         → index stats
+POST   /api/feedback     → signal quality feedback
+```
 
-GET  /api/lexicon      → multilingual semantic groups
-
-POST /api/prompt       → generate capture prompt for AI sessions
-
-GET  /api/merge-check  → deduplication before save
-
-GET  /api/meta         → index stats
-
-POST /api/feedback     → signal quality feedback
 ---
 
 ## Running it
 
-This is a personal tool — the encryption is tied to the machine it was set up on, so cloning and running it as-is won't work out of the box. The architecture is documented here for reference. A portable version with configurable env-based encryption is on the roadmap.
+You need a Supabase project with the `signals`, `lexicon`, `model_state`, `feedback`, `learned_synonyms` and `merge_feedback` tables and the `match_signals` function, plus an OpenAI API key.
 
 ```bash
+cd app
+# create .env with NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY, ALEXANDRIA_API_KEY
 npm install
-npm run seed   # seeds the multilingual lexicon
-npm run dev    # starts on localhost:3001
+npm run dev            # starts on localhost:3001
 ```
+
+The MCP server setup lives in [`mcp/README.md`](mcp/README.md).
 
 ---
 
 ## Roadmap
 
-- [ ] Supabase adapter (pgvector) — cross-device sync
-- [ ] Portable encryption (env-based, not machine-keyed)
+- [x] Supabase adapter (pgvector) — cross-device sync
 - [ ] Editable routing table from UI
 - [ ] Tauri desktop app (.exe / .dmg installer)
 - [ ] HTTP adapter for ChatGPT MCP compatibility

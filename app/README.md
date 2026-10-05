@@ -2,22 +2,23 @@
 
 > Context that survives the next chat.
 
-RAG local para tus conversaciones de IA. Guarda señales de tus chats, vectoriza con embeddings multilingües, recupera quirúrgicamente lo que necesitas.
+RAG personal para tus conversaciones de IA. Guarda señales de tus chats en Supabase, vectoriza con embeddings de OpenAI, recupera quirúrgicamente lo que necesitas.
 
 ## Setup
 
 ### Requisitos
 - Node.js v18+
-- npm
+- Un proyecto de Supabase con las tablas de Alexandria y la función `match_signals`
+- API key de OpenAI
 
 ### Instalación
 
 ```bash
-# 1. Instalar dependencias
-npm install
+# 1. Crear .env con:
+#    NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY, ALEXANDRIA_API_KEY
 
-# 2. Seed del lexicon inicial (20 grupos multilingüe)
-npm run seed
+# 2. Instalar dependencias
+npm install
 
 # 3. Arrancar
 npm run dev
@@ -25,9 +26,7 @@ npm run dev
 
 Abre [http://localhost:3001](http://localhost:3001)
 
-Los datos se guardan en:
-- **Windows:** `C:\Users\TuUsuario\Documents\alexandria\data\`
-- **Mac:** `~/Documents/alexandria/data/`
+Los datos viven en Supabase. El MCP server (`../mcp`) usa la misma base.
 
 ## Uso
 
@@ -45,13 +44,11 @@ El bloque generado lo pegas al inicio de tu próximo chat.
 
 ## Stack
 - **Next.js 14** + TypeScript
-- **Xenova/transformers** — embeddings `paraphrase-multilingual-MiniLM-L12-v2` (local, sin API)
-- **Vectra** — vector store local en disco
-- **better-sqlite3** — DB local SQLite
-- **AES-256-GCM** — encriptación ligada a la máquina
+- **Supabase** — Postgres + pgvector
+- **OpenAI** — embeddings `text-embedding-3-small`
 
 ## Roadmap
-- [ ] Adapter para Supabase (pgvector) — sync entre dispositivos
+- [x] Adapter para Supabase (pgvector) — sync entre dispositivos
 - [ ] Exportar/importar signals
 - [ ] Routing table editable desde UI
 - [ ] Versión Tauri (instalador .exe / .dmg)
