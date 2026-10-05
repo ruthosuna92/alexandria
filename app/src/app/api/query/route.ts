@@ -4,10 +4,7 @@ import { getLexicon, expandWithLexicon } from '@/lib/lexicon'
 import { vectorize, queryIndex } from '@/lib/vector'
 
 export async function POST(req: NextRequest) {
-  console.log('KEY EN ENV:', process.env.ALEXANDRIA_API_KEY)
-console.log('KEY EN HEADER:', req.headers.get('authorization'))
   try {
-
     const { q, proyecto, tema, stack } = await req.json()
     const db = getDb()
     const lexicon = await getLexicon()
