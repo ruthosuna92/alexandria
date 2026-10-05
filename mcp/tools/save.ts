@@ -1,7 +1,6 @@
-import { getDb, withFreshDb } from '../lib/db.js'
-import { getLexicon, expandWithLexicon } from '../lib/lexicon.js'
-import { vectorize, addToIndex } from '../lib/vector.js'
-import { maybeGenerateOverview } from '../lib/overview.js'
+import { expandWithLexicon } from '../lib/lexicon.js'
+import { embed } from '../lib/embedding.js'
+import { getLexicon, insertSignal, resolveProjectName } from '../lib/signals-repo.js'
 
 export const saveTool = {
   name: 'alexandria_save',
@@ -23,50 +22,62 @@ export const saveTool = {
   }
 }
 
-export async function handleSave(args: any) {
-  const lexicon   = await getLexicon()
+interface SaveArgs {
+  proyecto: string
+  contexto: string
+  tema: string
+  stack?: string[]
+  decisiones?: string[]
+  preferencias?: string[]
+  errores_resueltos?: string[]
+  modelo_sugerido?: string
+  skill_sugerida?: string
+}
 
+export async function handleSave(args: SaveArgs) {
+  const proyecto = await resolveProjectName(args.proyecto)
+  const lexicon  = await getLexicon()
+
+  // Same embedding text as the app's POST /api/signals, so a signal is
+  // embedded identically whether it was saved from the MCP or the app.
   const textForVector = expandWithLexicon(
     [
-      args.proyecto, args.proyecto, args.proyecto,
-      args.contexto, args.contexto, args.contexto,
-      args.tema, args.tema,
-      ...(args.stack||[]), ...(args.stack||[]),
-      ...(args.decisiones||[]),
-      ...(args.preferencias||[]),
-      ...(args.errores_resueltos||[]),
-      args.skill_sugerida||''
+      proyecto, args.contexto, args.tema,
+      ...(args.stack || []),
+      ...(args.decisiones || []),
+      ...(args.preferencias || []),
+      ...(args.errores_resueltos || []),
+      args.skill_sugerida || '',
     ].join(' '),
     lexicon
   )
 
-  const vector    = await vectorize(textForVector)
+  const embedding = await embed(textForVector)
   const id        = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-  const encrypted = JSON.stringify(args)
   const fecha     = new Date().toLocaleDateString('es-CO')
 
-  await withFreshDb(db => {
-    db.run(
-      `INSERT INTO signals (id,proyecto,contexto,tema,stack,modelo,skill,encrypted,vector_id,fecha)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, args.proyecto, args.contexto||'', args.tema||'otro',
-       JSON.stringify(args.stack||[]), args.modelo_sugerido||'',
-       args.skill_sugerida||'', encrypted, id, fecha]
-    )
+  await insertSignal({
+    id,
+    proyecto,
+    contexto:          args.contexto || '',
+    tema:              args.tema || 'otro',
+    stack:             args.stack || [],
+    decisiones:        args.decisiones || [],
+    preferencias:      args.preferencias || [],
+    errores_resueltos: args.errores_resueltos || [],
+    modelo:            args.modelo_sugerido || '',
+    skill:             args.skill_sugerida || '',
+    fecha,
+    embedding,
   })
-  await addToIndex(id, vector, { proyecto: args.proyecto, contexto: args.contexto, tema: args.tema })
 
-  await maybeGenerateOverview(args.proyecto)
-
-  const db2 = await getDb()
-  const countRes = db2.exec(`SELECT COUNT(*) FROM signals WHERE proyecto = ? AND contexto != 'overview'`, [args.proyecto])
-  const total = Number(countRes[0]?.values[0][0] || 0)
-  const overviewMsg = total % 3 === 0 ? `\n🔄 Overview de ${args.proyecto} actualizado automáticamente` : ''
+  // Automatic overview regeneration is re-enabled once overview generation
+  // moves to Supabase (lib/overview.ts still targets the old local db).
 
   return {
     content: [{
       type: 'text' as const,
-      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${args.proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}${overviewMsg}`
+      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}`
     }]
   }
 }

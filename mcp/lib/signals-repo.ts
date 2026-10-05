@@ -78,6 +78,29 @@ export async function listSignals(filters: SignalFilters = {}): Promise<SignalRo
   return rows.filter(r => (r.stack || []).some(s => s.toLowerCase().includes(needle)))
 }
 
+/**
+ * Returns the existing spelling of a project name, matched case-insensitively,
+ * so "spybee" is saved as "Spybee" when that already exists. When several
+ * spellings exist, the most used one wins. Unknown projects are returned trimmed.
+ */
+export async function resolveProjectName(proyecto: string): Promise<string> {
+  const trimmed = proyecto.trim()
+  const { data, error } = await getSupabase().from('signals').select('proyecto')
+  if (error) throw new Error(`listing projects failed: ${error.message}`)
+
+  const counts = new Map<string, number>()
+  for (const row of (data || []) as Array<{ proyecto: string }>) {
+    if (row.proyecto.toLowerCase() === trimmed.toLowerCase()) {
+      counts.set(row.proyecto, (counts.get(row.proyecto) || 0) + 1)
+    }
+  }
+
+  // Ties break by code point order, which puts capitalized spellings first
+  // ("Alexandria" over "alexandria").
+  const [mostUsed] = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+  return mostUsed ? mostUsed[0] : trimmed
+}
+
 export async function insertSignal(signal: NewSignal): Promise<void> {
   const { error } = await getSupabase().from('signals').insert(signal)
   if (error) throw new Error(`inserting signal failed: ${error.message}`)
