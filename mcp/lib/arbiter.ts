@@ -11,21 +11,28 @@ export interface ArbiterResult {
   context: string
 }
 
+// Words that join two distinct topics. "con" / "junto" are left out on purpose:
+// "bug con Supabase" is one topic, not two.
 const COMPOUND_CONNECTORS = [
-  'y', 'and', '&', 'también', 'tambien', 'además', 'ademas',
-  'con', 'junto', 'more', 'plus', 'e ', ' + ', 'así como', 'asi como'
+  'y', 'e', 'and', '&', '+', 'plus',
+  'también', 'tambien', 'además', 'ademas', 'así como', 'asi como',
 ]
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function detectCompoundQuery(q: string): { isCompound: boolean; parts: string[] } {
-  const lower = q.toLowerCase()
   for (const connector of COMPOUND_CONNECTORS) {
-    const idx = lower.indexOf(connector)
-    if (idx > 3 && idx < lower.length - 3) {
-      const before = q.slice(0, idx).trim()
-      const after  = q.slice(idx + connector.length).trim()
-      if (before.length > 2 && after.length > 2) {
-        return { isCompound: true, parts: [before, after] }
-      }
+    // Whole words only (surrounded by whitespace), so "Spybee" or "Alexandria"
+    // never split on the "y" / "and" inside them.
+    const match = new RegExp(`\\s${escapeRegExp(connector)}\\s`, 'i').exec(q)
+    if (!match) continue
+
+    const before = q.slice(0, match.index).trim()
+    const after  = q.slice(match.index + match[0].length).trim()
+    if (before.length > 2 && after.length > 2) {
+      return { isCompound: true, parts: [before, after] }
     }
   }
   return { isCompound: false, parts: [q] }
