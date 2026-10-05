@@ -1,4 +1,4 @@
-import { getDb, getModelState } from '../lib/db.js'
+import { getModelState } from '../lib/signals-repo.js'
 
 const ROUTING_TABLE: Record<string, { modelo: string; razon: string }> = {
   arquitectura: { modelo: 'claude-opus-4-6',   razon: 'decisiones críticas y diseño de sistemas' },
@@ -23,11 +23,9 @@ export const suggestTool = {
 }
 
 export async function handleSuggest(args: { tema: string; stack?: string }) {
-  const db = await getDb()
-
   let learnedRouting: Record<string, string> = {}
   try {
-    const raw = getModelState(db, 'learned_routing')
+    const raw = await getModelState('learned_routing')
     if (raw) {
       const parsed = JSON.parse(raw)
       learnedRouting = Object.fromEntries(Object.entries(parsed).map(([t, d]) => [t, (d as any).modelo]))
