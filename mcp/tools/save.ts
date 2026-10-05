@@ -1,6 +1,7 @@
 import { expandWithLexicon } from '../lib/lexicon.js'
 import { embed } from '../lib/embedding.js'
 import { getLexicon, insertSignal, resolveProjectName } from '../lib/signals-repo.js'
+import { maybeGenerateOverview } from '../lib/overview.js'
 
 export const saveTool = {
   name: 'alexandria_save',
@@ -71,13 +72,13 @@ export async function handleSave(args: SaveArgs) {
     embedding,
   })
 
-  // Automatic overview regeneration is re-enabled once overview generation
-  // moves to Supabase (lib/overview.ts still targets the old local db).
+  const overviewUpdated = await maybeGenerateOverview(proyecto)
+  const overviewMsg = overviewUpdated ? `\n🔄 Overview de ${proyecto} actualizado automáticamente` : ''
 
   return {
     content: [{
       type: 'text' as const,
-      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}`
+      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}${overviewMsg}`
     }]
   }
 }

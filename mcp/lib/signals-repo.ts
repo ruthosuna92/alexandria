@@ -106,6 +106,38 @@ export async function insertSignal(signal: NewSignal): Promise<void> {
   if (error) throw new Error(`inserting signal failed: ${error.message}`)
 }
 
+export const OVERVIEW_CONTEXTO = 'overview'
+
+/** Number of real (non-overview) signals in a project. */
+export async function countProjectSignals(proyecto: string): Promise<number> {
+  const { count, error } = await getSupabase()
+    .from('signals')
+    .select('*', { count: 'exact', head: true })
+    .eq('proyecto', proyecto)
+    .neq('contexto', OVERVIEW_CONTEXTO)
+  if (error) throw new Error(`counting signals failed: ${error.message}`)
+  return count || 0
+}
+
+/**
+ * Creates or replaces a project's overview row. The id is derived from the
+ * project name, so concurrent regenerations from two MCP processes upsert the
+ * same row instead of inserting duplicates.
+ */
+export async function upsertOverview(overview: Omit<NewSignal, 'id' | 'contexto' | 'fecha'>): Promise<void> {
+  const { error } = await getSupabase()
+    .from('signals')
+    .upsert({
+      ...overview,
+      id: `ov_${overview.proyecto}`,
+      contexto: OVERVIEW_CONTEXTO,
+      fecha: new Date().toLocaleDateString('es-CO'),
+      // Refreshed on every regeneration so the arbiter's recency score reflects it.
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+  if (error) throw new Error(`saving overview failed: ${error.message}`)
+}
+
 export async function getLexicon(): Promise<LexiconGroup[]> {
   const { data, error } = await getSupabase()
     .from('lexicon')
