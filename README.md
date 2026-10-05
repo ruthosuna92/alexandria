@@ -67,7 +67,8 @@ You need a Supabase project with the `signals`, `lexicon`, `model_state`, `feedb
 
 ```bash
 cd app
-# create .env with NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY, ALEXANDRIA_API_KEY
+# create .env with NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY,
+#   ALEXANDRIA_API_KEY (ChatGPT action), ALEXANDRIA_USER and ALEXANDRIA_PASSWORD (app login)
 npm install
 npm run dev            # starts on localhost:3001
 ```
