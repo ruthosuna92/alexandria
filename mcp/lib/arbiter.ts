@@ -11,6 +11,11 @@ export interface ArbiterResult {
   context: string
 }
 
+// Minimum composite score for a signal to be injected as context. Calibrated
+// with scripts/calibrate-threshold.ts against OpenAI embeddings (2026-10-05):
+// keeps 14/14 paraphrased relevant queries, lets 1/10 unrelated ones through.
+export const RELEVANCE_THRESHOLD = 0.22
+
 // Words that join two distinct topics. "con" / "junto" are left out on purpose:
 // "bug con Supabase" is one topic, not two.
 const COMPOUND_CONNECTORS = [
@@ -58,7 +63,7 @@ function scoreSignal(signal: Signal, query: string, queryTokens: string[], proye
   return Math.min(score, 1)
 }
 
-async function fetchCandidates(subQuery: string, proyecto?: string, tema?: string, stack?: string): Promise<Array<Signal & { vectorScore: number; compositeScore: number }>> {
+export async function fetchCandidates(subQuery: string, proyecto?: string, tema?: string, stack?: string): Promise<Array<Signal & { vectorScore: number; compositeScore: number }>> {
   const lexicon = await getLexicon()
 
   const expanded = expandWithLexicon(subQuery, lexicon)
@@ -108,8 +113,8 @@ export async function runArbiter(q: string, proyecto?: string, tema?: string, st
 
     const bestA = candidatesA[0]
     const bestB = candidatesB[0]
-    const isRelevantA = !!bestA && bestA.compositeScore >= 0.35
-    const isRelevantB = !!bestB && bestB.compositeScore >= 0.35
+    const isRelevantA = !!bestA && bestA.compositeScore >= RELEVANCE_THRESHOLD
+    const isRelevantB = !!bestB && bestB.compositeScore >= RELEVANCE_THRESHOLD
 
     if (!isRelevantA && !isRelevantB) {
       return { mode: 'none', signals: [], reason: 'no hay contexto relevante para ninguna parte de la query', context: '' }
@@ -166,7 +171,7 @@ export async function runArbiter(q: string, proyecto?: string, tema?: string, st
 
   const candidates = await fetchCandidates(q, proyecto, tema, stack)
 
-  if (!candidates.length || candidates[0].compositeScore < 0.35) {
+  if (!candidates.length || candidates[0].compositeScore < RELEVANCE_THRESHOLD) {
     return { mode: 'none', signals: [], reason: 'score muy bajo — no hay contexto suficientemente relevante', context: '' }
   }
 
