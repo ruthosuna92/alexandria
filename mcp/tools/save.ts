@@ -1,6 +1,6 @@
-import { expandWithLexicon } from '../lib/lexicon.js'
+import { describeUpsert, expandWithLexicon, type LexiconInput } from '../lib/lexicon.js'
 import { embed } from '../lib/embedding.js'
-import { getLexicon, insertSignal, resolveProjectName } from '../lib/signals-repo.js'
+import { getLexicon, insertSignal, resolveProjectName, upsertLexiconGroups } from '../lib/signals-repo.js'
 import { maybeGenerateOverview } from '../lib/overview.js'
 
 export const saveTool = {
@@ -18,6 +18,18 @@ export const saveTool = {
       errores_resueltos: { type: 'array', items: { type: 'string' } },
       modelo_sugerido:   { type: 'string' },
       skill_sugerida:    { type: 'string' },
+      lexicon: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            terms:  { type: 'array', items: { type: 'string' } },
+            domain: { type: 'string' },
+            langs:  { type: 'array', items: { type: 'string' } },
+          },
+          required: ['terms'],
+        },
+      },
     },
     required: ['proyecto', 'contexto', 'tema']
   }
@@ -33,10 +45,14 @@ interface SaveArgs {
   errores_resueltos?: string[]
   modelo_sugerido?: string
   skill_sugerida?: string
+  lexicon?: LexiconInput[]
 }
 
 export async function handleSave(args: SaveArgs) {
   const proyecto = await resolveProjectName(args.proyecto)
+
+  // Save proposed families first so this signal's embedding already uses them.
+  const lexiconResult = await upsertLexiconGroups(args.lexicon || [])
   const lexicon  = await getLexicon()
 
   // Same embedding text as the app's POST /api/signals, so a signal is
@@ -74,11 +90,13 @@ export async function handleSave(args: SaveArgs) {
 
   const overviewUpdated = await maybeGenerateOverview(proyecto)
   const overviewMsg = overviewUpdated ? `\n🔄 Overview de ${proyecto} actualizado automáticamente` : ''
+  const lexiconSummary = describeUpsert(lexiconResult)
+  const lexiconMsg = lexiconSummary ? `\nLexicon:\n${lexiconSummary}` : ''
 
   return {
     content: [{
       type: 'text' as const,
-      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}${overviewMsg}`
+      text: `[Alexandria] ✅ Signal guardado\nProyecto: ${proyecto}\nContexto: ${args.contexto}\nFecha: ${fecha}${overviewMsg}${lexiconMsg}`
     }]
   }
 }

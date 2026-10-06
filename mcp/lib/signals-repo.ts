@@ -1,6 +1,7 @@
 // The only module that reads or writes Alexandria data. Tools and the arbiter
 // go through these functions so they never depend on how storage works.
 import { getSupabase } from './supabase.js'
+import { cleanTerms, LEXICON_DOMAINS, MIN_TERM_LENGTH, type LexiconInput, type LexiconUpsertResult } from './lexicon.js'
 
 export interface SignalRow {
   id: string
@@ -145,6 +146,56 @@ export async function getLexicon(): Promise<LexiconGroup[]> {
     .order('domain')
   if (error) throw new Error(`loading lexicon failed: ${error.message}`)
   return (data || []) as LexiconGroup[]
+}
+
+/**
+ * Saves AI-proposed families. A group that shares any term (case-insensitive)
+ * with an existing group extends that group; otherwise it becomes a new group.
+ */
+export async function upsertLexiconGroups(inputs: LexiconInput[]): Promise<LexiconUpsertResult> {
+  const result: LexiconUpsertResult = { created: [], extended: [], skipped: [] }
+  if (!Array.isArray(inputs) || !inputs.length) return result
+
+  const db = getSupabase()
+  const lexicon = await getLexicon()
+
+  for (const input of inputs) {
+    const terms = cleanTerms(input?.terms)
+    const langs = Array.isArray(input?.langs) ? input.langs.filter(l => typeof l === 'string') : []
+    if (terms.length < 2) {
+      result.skipped.push({ terms: Array.isArray(input?.terms) ? input.terms : [], reason: `needs 2+ terms of ${MIN_TERM_LENGTH}+ chars` })
+      continue
+    }
+
+    const lowered = new Set(terms.map(t => t.toLowerCase()))
+    const match = lexicon.find(g => g.terms.some(t => lowered.has(t.toLowerCase())))
+
+    if (match) {
+      const existing = new Set(match.terms.map(t => t.toLowerCase()))
+      const added = terms.filter(t => !existing.has(t.toLowerCase()))
+      if (!added.length) {
+        result.skipped.push({ terms, reason: `already in ${match.id}` })
+        continue
+      }
+      match.terms = [...match.terms, ...added]
+      match.langs = [...new Set([...(match.langs || []), ...langs])]
+      const { error } = await db.from('lexicon')
+        .update({ terms: match.terms, langs: match.langs })
+        .eq('id', match.id)
+      if (error) throw new Error(`extending ${match.id} failed: ${error.message}`)
+      result.extended.push({ id: match.id, added })
+      continue
+    }
+
+    const domain = (LEXICON_DOMAINS as readonly string[]).includes(input.domain ?? '') ? input.domain! : 'general'
+    const id = 'lex_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
+    const { error } = await db.from('lexicon').insert({ id, terms, domain, langs })
+    if (error) throw new Error(`creating lexicon group failed: ${error.message}`)
+    lexicon.push({ id, terms, domain, langs })
+    result.created.push(terms)
+  }
+
+  return result
 }
 
 export async function getModelState(key: string): Promise<string | null> {

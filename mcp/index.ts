@@ -5,6 +5,13 @@ import { handleQuery } from './tools/query.js'
 import { handleSave } from './tools/save.js'
 import { handleSuggest } from './tools/suggest.js'
 import { handleRegenerate } from './tools/regenerate.js'
+import { handleLexiconList, handleLexiconSave } from './tools/lexicon.js'
+
+const lexiconGroups = z.array(z.object({
+  terms:  z.array(z.string()).describe('Términos de la misma familia: sinónimos, traducciones, alias'),
+  domain: z.string().optional().describe('general | dev | project | mental-health | spybee | custom'),
+  langs:  z.array(z.string()).optional().describe('Idiomas, ej: ["es", "en"]'),
+}))
 
 const server = new McpServer({
   name: 'alexandria',
@@ -34,8 +41,25 @@ server.tool(
     errores_resueltos: z.array(z.string()).optional().describe('Bugs resueltos'),
     modelo_sugerido:   z.string().optional().describe('Modelo recomendado'),
     skill_sugerida:    z.string().optional().describe('Skill file recomendado'),
+    lexicon:           lexiconGroups.optional().describe('Familias de palabras nuevas o ampliadas. Llama alexandria_lexicon_list antes para ver las reglas y el lexicon actual'),
   },
   async (args) => handleSave(args)
+)
+
+server.tool(
+  'alexandria_lexicon_list',
+  'Lista el lexicon de Alexandria (familias de sinónimos, traducciones y alias) y las reglas para proponer grupos nuevos.',
+  {},
+  async () => handleLexiconList()
+)
+
+server.tool(
+  'alexandria_lexicon_save',
+  'Guarda familias de palabras en el lexicon. Si un término ya existe en un grupo, los demás se agregan a ese grupo; si no, se crea uno nuevo.',
+  {
+    groups: lexiconGroups.describe('Máximo 3 grupos, 2+ términos de 4+ caracteres cada uno'),
+  },
+  async (args) => handleLexiconSave(args)
 )
 
 server.tool(
