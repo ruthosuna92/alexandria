@@ -5,6 +5,7 @@ import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 // Reads live data; without this Next.js prerenders it once at build time.
 export const dynamic = 'force-dynamic'
 import { getLearnedRouting } from '@/lib/learning'
+import { formatLexiconForPrompt, getLexicon, LEXICON_RULES } from '@/lib/lexicon'
 
 export async function GET() {
   try {
@@ -27,6 +28,7 @@ export async function GET() {
     const allSkills  = [...new Set([...BASE_SKILLS,  ...skills])]
     const allModelos = [...new Set([...BASE_MODELOS, ...modelos])]
 
+    const lexicon = await getLexicon()
     const learnedRouting = await getLearnedRouting()
     const routingHint = Object.keys(learnedRouting).length
       ? `\n// Sugerencia aprendida por tema: ${JSON.stringify(learnedRouting)}`
@@ -42,8 +44,15 @@ export async function GET() {
   "preferencias": ["preferencias expresadas"],
   "errores_resueltos": ["bugs resueltos"],
   "modelo_sugerido": "${allModelos.join(' | ')}",${routingHint}
-  "skill_sugerida": "${allSkills.join(' | ')}"
+  "skill_sugerida": "${allSkills.join(' | ')}",
+  "lexicon": [{ "terms": ["término", "sinónimo", "translation"], "domain": "general", "langs": ["es", "en"] }]
 }
+
+${LEXICON_RULES}
+
+Lexicon actual:
+${formatLexiconForPrompt(lexicon)}
+
 Solo el JSON, sin texto adicional ni backticks.`
 
     return NextResponse.json({ prompt, meta: { proyectos, temas: allTemas, skills: allSkills, modelos: allModelos } })

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
-import { getLexicon, expandWithLexicon } from '@/lib/lexicon'
+import { getLexicon, expandWithLexicon, upsertLexiconGroups } from '@/lib/lexicon'
 import { vectorize } from '@/lib/vector'
 
 export async function GET(req: NextRequest) {
@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
     const { proyecto, contexto, tema, stack, decisiones, preferencias, errores_resueltos, modelo_sugerido, skill_sugerida } = body
     if (!proyecto) return NextResponse.json({ error: 'proyecto is required' }, { status: 400 })
 
+    // Save proposed families first so this signal's embedding already uses them.
+    const lexiconResult = await upsertLexiconGroups(body.lexicon || [])
     const lexicon = await getLexicon()
     const textForVector = expandWithLexicon(
       [proyecto, contexto, tema, ...(stack||[]), ...(decisiones||[]), ...(preferencias||[]), ...(errores_resueltos||[]), skill_sugerida||''].join(' '),
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
     })
     if (error) throw new Error(error.message)
 
-    return NextResponse.json({ id, fecha })
+    return NextResponse.json({ id, fecha, lexicon: lexiconResult })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

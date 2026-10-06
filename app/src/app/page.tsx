@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import styles from './page.module.css'
+import { LEXICON_DOMAINS } from '@/lib/lexicon/domains'
 
 type Signal = {
   id: string; proyecto: string; contexto: string; tema: string
@@ -18,7 +19,7 @@ type MergeCandidate = {
   decisionsAnalysis: { nueva: string; anterior: string; score: number; tipo: 'duplicado' | 'evolucion' }[]
 }
 type LearningStats = {
-  feedbackCount: number; mergeCount: number; synonymsCount: number
+  feedbackCount: number; mergeCount: number; lexiconCount: number
   thresholds: { duplicado: number; evolucion: number }
   routing: Record<string, string>
 }
@@ -83,6 +84,9 @@ export default function Home() {
   const [synInput, setSynInput] = useState('')
   const [synDomain, setSynDomain] = useState('general')
   const [synLangs, setSynLangs] = useState('')
+  const [lexiconPrompt, setLexiconPrompt] = useState('cargando prompt...')
+  const [lexiconImport, setLexiconImport] = useState('')
+  const [importing, setImporting] = useState(false)
   const [promptTemplate, setPromptTemplate] = useState('cargando prompt...')
   const [mergeCandidate, setMergeCandidate] = useState<MergeCandidate | null>(null)
   const [pendingSignal, setPendingSignal] = useState<any>(null)
@@ -106,6 +110,8 @@ export default function Home() {
 
   const loadLexicon = useCallback(async () => {
     const r = await fetch('/api/lexicon'); const d = await r.json(); setLexicon(d.lexicon || [])
+    const p = await fetch('/api/lexicon/prompt'); const pd = await p.json()
+    if (pd.prompt) setLexiconPrompt(pd.prompt)
   }, [])
 
   const loadLearning = useCallback(async () => {
@@ -207,6 +213,21 @@ export default function Home() {
     const d = await r.json()
     if (d.error) { showToast(d.error); return }
     setSynInput(''); setSynLangs(''); loadLexicon(); showToast('synonym group added')
+  }
+
+  const importLexicon = async () => {
+    let parsed: any
+    try { parsed = JSON.parse(lexiconImport) } catch { showToast('invalid JSON — check format'); return }
+    const groups = Array.isArray(parsed) ? parsed : parsed?.groups
+    if (!Array.isArray(groups)) { showToast('expected { "groups": [...] }'); return }
+    setImporting(true)
+    const r = await fetch('/api/lexicon', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ groups }) })
+    const d = await r.json()
+    setImporting(false)
+    if (d.error) { showToast(d.error); return }
+    const { created, extended, skipped } = d.result
+    setLexiconImport(''); loadLexicon()
+    showToast(`${created.length} new · ${extended.length} extended · ${skipped.length} skipped`)
   }
 
   const deleteSynGroup = async (id: string) => {
@@ -349,13 +370,12 @@ export default function Home() {
           <div className={styles.card}>
             <div className={styles.label}>multilingual synonym groups</div>
             <div style={{ fontSize:10, color:'#5a5754', marginBottom:12, lineHeight:1.7 }}>
-              Los marcados con <span style={{ color:'#1D9E75' }}>∞</span> fueron aprendidos automáticamente por Alexandria.
+              Crece con el campo <span style={{ color:'#e8e6e1' }}>lexicon</span> del signal o con el prompt de abajo.
             </div>
             {lexicon.map(g => (
               <div key={g.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 0', borderBottom:'0.5px solid rgba(255,255,255,0.06)', flexWrap:'wrap' }}>
                 <span style={{ fontSize:9, color:'#5a5754', minWidth:70 }}>{g.domain}</span>
                 <div style={{ display:'flex', gap:4, flex:1, flexWrap:'wrap', alignItems:'center' }}>
-                  {(g as any).source === 'behavior' && <span style={{ fontSize:9, color:'#1D9E75' }}>∞</span>}
                   {g.terms.map(t => <span key={t} style={{ fontSize:10, padding:'2px 8px', background:'#1a1a1a', border:'0.5px solid rgba(255,255,255,0.08)', borderRadius:20, color:'#9a9690' }}>{t}</span>)}
                 </div>
                 <div style={{ display:'flex', gap:4, alignItems:'center' }}>
@@ -370,7 +390,7 @@ export default function Home() {
               <div className={styles.filterRow}>
                 <div className={styles.filterGroup}><span className={styles.filterLabel}>domain</span>
                   <select className={styles.select} value={synDomain} onChange={e => setSynDomain(e.target.value)}>
-                    {['general','mental-health','dev','spybee','custom'].map(d=><option key={d} value={d}>{d}</option>)}
+                    {LEXICON_DOMAINS.map(d=><option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div className={styles.filterGroup}><span className={styles.filterLabel}>languages</span>
@@ -378,6 +398,28 @@ export default function Home() {
                 </div>
                 <button className={`${styles.btn} ${styles.btnPrimary}`} style={{ alignSelf:'flex-end' }} onClick={addSynGroup}>add →</button>
               </div>
+            </div>
+          </div>
+          <div className={styles.card}>
+            <div className={styles.label}>prompt para proponer familias</div>
+            <div style={{ fontSize:10, color:'#5a5754', marginBottom:8, lineHeight:1.7 }}>
+              Pégalo en la sesión donde estás trabajando. Con el MCP de Alexandria guarda directo; sin MCP te devuelve un JSON para importar abajo.
+            </div>
+            <pre className={styles.codeBlock}>{lexiconPrompt}</pre>
+            <div className={styles.row} style={{ marginTop:10, justifyContent:'flex-end' }}>
+              <button className={styles.btn} onClick={() => copy(lexiconPrompt, 'prompt copied!')}>copy prompt →</button>
+            </div>
+          </div>
+          <div className={styles.card}>
+            <div className={styles.label}>import json</div>
+            <textarea className={styles.textarea} rows={6} value={lexiconImport} onChange={e => setLexiconImport(e.target.value)}
+              placeholder={'{ "groups": [{ "terms": ["keycap", "tecla"], "domain": "general", "langs": ["en", "es"] }] }'} />
+            <div style={{ fontSize:10, color:'#5a5754', marginTop:6 }}>si un término ya existe, se agrega a ese grupo · si no, se crea uno nuevo</div>
+            <div className={styles.row} style={{ marginTop:10, justifyContent:'flex-end' }}>
+              <button className={styles.btn} onClick={() => setLexiconImport('')}>clear</button>
+              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={importLexicon} disabled={importing}>
+                {importing ? 'guardando...' : 'import →'}
+              </button>
             </div>
           </div>
         </div>
@@ -388,7 +430,7 @@ export default function Home() {
           <div className={styles.statsGrid}>
             <div className={styles.statCard}><div className={styles.statNum}>{learningStats?.feedbackCount||0}</div><div className={styles.statLabel}>interactions</div></div>
             <div className={styles.statCard}><div className={styles.statNum}>{learningStats?.mergeCount||0}</div><div className={styles.statLabel}>merge decisions</div></div>
-            <div className={styles.statCard}><div className={styles.statNum}>{learningStats?.synonymsCount||0}</div><div className={styles.statLabel}>learned synonyms</div></div>
+            <div className={styles.statCard}><div className={styles.statNum}>{learningStats?.lexiconCount||0}</div><div className={styles.statLabel}>lexicon groups</div></div>
           </div>
           <div className={styles.card}>
             <div className={styles.label}>thresholds aprendidos</div>
@@ -425,7 +467,7 @@ export default function Home() {
               <span style={{ color:'#e8e6e1' }}>copy context</span> → señal positiva, sube el ranking<br/>
               <span style={{ color:'#e8e6e1' }}>× borrar</span> → señal negativa, baja el ranking<br/>
               <span style={{ color:'#e8e6e1' }}>merge decisions</span> → ajusta thresholds de similitud<br/>
-              <span style={{ color:'#1D9E75' }}>∞ sinónimos</span> → se detectan y agregan automáticamente<br/>
+              <span style={{ color:'#1D9E75' }}>~ lexicon</span> → la IA propone familias en el signal o con el prompt del tab lexicon<br/>
               <span style={{ color:'#e8e6e1' }}>routing</span> → aprende qué modelo usas para cada tema
             </div>
           </div>
