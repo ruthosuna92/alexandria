@@ -5,6 +5,12 @@ import { safeEqual } from '@/lib/auth'
 // once and then sends the credentials on every same-origin fetch, so the UI
 // needs no changes. /api/gpt/* is excluded in `config.matcher` because the
 // ChatGPT action authenticates with its own bearer key (see lib/auth.ts).
+// /api/mcp and its OAuth metadata are skipped below: MCP clients can't do
+// Basic Auth, and the route checks a Supabase OAuth token (see lib/mcp-auth.ts).
+
+function usesOAuthInstead(pathname: string): boolean {
+  return pathname === '/api/mcp' || pathname.startsWith('/.well-known/oauth-protected-resource')
+}
 
 function unauthorized() {
   return new NextResponse('Authentication required', {
@@ -14,6 +20,8 @@ function unauthorized() {
 }
 
 export function middleware(req: NextRequest) {
+  if (usesOAuthInstead(req.nextUrl.pathname)) return NextResponse.next()
+
   const user = process.env.ALEXANDRIA_USER
   const password = process.env.ALEXANDRIA_PASSWORD
 

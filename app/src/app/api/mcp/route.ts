@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import { handleMcpRequest } from '../../../../../mcp/http'
+import { checkMcpAuth } from '@/lib/mcp-auth'
 
 // Remote MCP endpoint (Streamable HTTP) exposing the same tools as the local
-// stdio server. For now it sits behind the app-wide Basic Auth in middleware.ts.
+// stdio server. Excluded from Basic Auth: it requires a Supabase OAuth access
+// token for the owner instead (see lib/mcp-auth.ts).
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
+  const denied = await checkMcpAuth(req)
+  if (denied) return denied
   return handleMcpRequest(req)
 }
 
