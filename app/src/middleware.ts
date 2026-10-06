@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeEqual } from '@/lib/auth'
 
 // Protects every page and API route with HTTP Basic Auth. The browser prompts
 // once and then sends the credentials on every same-origin fetch, so the UI
-// needs no changes.
-
-// Edge runtime has no crypto.timingSafeEqual; compare every character so the
-// response time doesn't reveal how much of the password matched.
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return diff === 0
-}
+// needs no changes. /api/gpt/* is excluded in `config.matcher` because the
+// ChatGPT action authenticates with its own bearer key (see lib/auth.ts).
 
 function unauthorized() {
   return new NextResponse('Authentication required', {
@@ -54,5 +47,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/gpt/).*)'],
 }

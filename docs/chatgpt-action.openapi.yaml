@@ -1,0 +1,63 @@
+# Paste this into the ChatGPT custom GPT editor: Configure → Actions → Schema.
+# Authentication: API Key → Bearer, value = ALEXANDRIA_API_KEY from Vercel.
+openapi: 3.1.0
+info:
+  title: Alexandria
+  description: Searches Alejandra's saved AI-session context (decisions, preferences, solved bugs) by project and topic.
+  version: 1.0.0
+servers:
+  - url: https://alexandria-fawn.vercel.app
+paths:
+  /api/gpt/query:
+    post:
+      operationId: queryAlexandria
+      summary: Search saved context
+      description: Call this before answering technical questions to retrieve the user's past decisions, stack and preferences. Searches semantically in Spanish or English.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+                  description: What to search for, e.g. "auth decisions in EcoRewards".
+                proyecto:
+                  type: string
+                  description: Optional exact project name filter, e.g. "Spybee".
+                tema:
+                  type: string
+                  enum: [bug, feature, arquitectura, planning, ui, otro]
+                  description: Optional topic filter.
+                stack:
+                  type: string
+                  description: Optional technology filter, e.g. "Next.js".
+              required: [q]
+      responses:
+        '200':
+          description: Matching signals, best first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        proyecto: { type: string }
+                        contexto: { type: string }
+                        tema: { type: string }
+                        stack: { type: array, items: { type: string } }
+                        modelo: { type: string }
+                        skill: { type: string }
+                        fecha: { type: string }
+                        decisiones: { type: array, items: { type: string } }
+                        preferencias: { type: array, items: { type: string } }
+                        errores_resueltos: { type: array, items: { type: string } }
+                        score: { type: number }
+        '401':
+          description: Missing or wrong bearer key.
