@@ -48,7 +48,6 @@ export async function recordFeedback(entry: FeedbackEntry) {
 
   const { count } = await db.from('feedback').select('*', { count: 'exact', head: true })
   if (count && Number(count) % 10 === 0) {
-    await learnSynonyms()
     await learnModelRouting()
   }
 }
@@ -97,65 +96,6 @@ async function recalculateThresholds() {
   }))
 }
 
-async function learnSynonyms() {
-  const db = getDb()
-  const { data: rows } = await db
-    .from('feedback')
-    .select('query, signals(stack)')
-    .eq('tipo', 'copy')
-    .neq('query', '')
-    .order('created_at', { ascending: false })
-    .limit(200)
-
-  if (!rows?.length) return
-
-  const pairs: Map<string, Set<string>> = new Map()
-  for (const row of rows) {
-    const queryTokens = row.query.toLowerCase().split(/\W+/).filter((w: string) => w.length > 3)
-    const stackTerms: string[] = ((row as any).signals?.stack || []).map((s: string) => s.toLowerCase())
-    for (const qt of queryTokens) {
-      for (const st of stackTerms) {
-        if (qt !== st && !qt.includes(st) && !st.includes(qt)) {
-          const key = [qt, st].sort().join('|||')
-          if (!pairs.has(key)) pairs.set(key, new Set([qt, st]))
-        }
-      }
-    }
-  }
-
-  for (const [, terms] of pairs.entries()) {
-    const termsArr = [...terms]
-    const { data: existing } = await db
-      .from('learned_synonyms')
-      .select('id, confidence')
-      .eq('terms', JSON.stringify(termsArr))
-      .single()
-
-    if (existing) {
-      await db.from('learned_synonyms')
-        .update({ confidence: Math.min(existing.confidence + 0.1, 1.0) })
-        .eq('id', existing.id)
-    } else {
-      const id = 'lsyn_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
-      await db.from('learned_synonyms').upsert({ id, terms: termsArr, confidence: 0.1, source: 'behavior' })
-    }
-  }
-
-  const { data: highConf } = await db
-    .from('learned_synonyms')
-    .select('id, terms')
-    .gte('confidence', 0.5)
-    .eq('source', 'behavior')
-
-  for (const row of highConf || []) {
-    const { data: exists } = await db.from('lexicon').select('id').eq('terms', row.terms).single()
-    if (!exists) {
-      const id = 'lex_auto_' + Date.now().toString(36)
-      await db.from('lexicon').insert({ id, terms: row.terms, domain: 'learned', langs: [] })
-    }
-  }
-}
-
 async function learnModelRouting() {
   const db = getDb()
   const { data: rows } = await db
@@ -191,8 +131,8 @@ export async function getLearningStats() {
   const db = getDb()
   const { count: feedbackCount } = await db.from('feedback').select('*', { count: 'exact', head: true })
   const { count: mergeCount }    = await db.from('merge_feedback').select('*', { count: 'exact', head: true })
-  const { count: synonymsCount } = await db.from('learned_synonyms').select('*', { count: 'exact', head: true }).gte('confidence', 0.5)
+  const { count: lexiconCount }  = await db.from('lexicon').select('*', { count: 'exact', head: true })
   const thresholds = await getThresholds()
   const routing    = await getLearnedRouting()
-  return { feedbackCount, mergeCount, synonymsCount, thresholds, routing }
+  return { feedbackCount, mergeCount, lexiconCount, thresholds, routing }
 }
