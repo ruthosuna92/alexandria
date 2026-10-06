@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 import { vectorize } from '@/lib/vector'
 import { getThresholds } from '@/lib/learning'
 
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       .from('signals')
       .select('id,proyecto,contexto,tema,stack,decisiones,embedding')
       .eq('proyecto', proyecto)
+      .neq('contexto', OVERVIEW_CONTEXTO)
       .order('created_at', { ascending: false })
       .limit(5)
 

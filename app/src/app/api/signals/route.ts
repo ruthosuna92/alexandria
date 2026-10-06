@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 import { getLexicon, expandWithLexicon } from '@/lib/lexicon'
 import { vectorize } from '@/lib/vector'
 
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const tema     = searchParams.get('tema')
     const stack    = searchParams.get('stack')
 
-    let query = db.from('signals').select('id,proyecto,contexto,tema,stack,modelo,skill,fecha')
+    let query = db.from('signals').select('id,proyecto,contexto,tema,stack,modelo,skill,fecha').neq('contexto', OVERVIEW_CONTEXTO)
     if (proyecto) query = query.eq('proyecto', proyecto)
     if (tema)     query = query.eq('tema', tema)
     if (stack)    query = query.contains('stack', [stack])

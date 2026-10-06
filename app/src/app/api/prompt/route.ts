@@ -1,15 +1,15 @@
 // prompt/route.ts
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 import { getLearnedRouting } from '@/lib/learning'
 
 export async function GET() {
   try {
     const db = getDb()
-    const { data: proyData }  = await db.from('signals').select('proyecto')
-    const { data: temaData }  = await db.from('signals').select('tema')
-    const { data: skillData } = await db.from('signals').select('skill').neq('skill', '')
-    const { data: modelData } = await db.from('signals').select('modelo').neq('modelo', '')
+    const { data: proyData }  = await db.from('signals').select('proyecto').neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: temaData }  = await db.from('signals').select('tema').neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: skillData } = await db.from('signals').select('skill').neq('skill', '').neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: modelData } = await db.from('signals').select('modelo').neq('modelo', '').neq('contexto', OVERVIEW_CONTEXTO)
 
     const proyectos = [...new Set((proyData||[]).map(r => r.proyecto))].filter(Boolean).sort()
     const temas     = [...new Set((temaData||[]).map(r => r.tema))].filter(Boolean).sort()

@@ -1,15 +1,15 @@
 // meta/route.ts
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 
 export async function GET() {
   try {
     const db = getDb()
 
-    const { count: total }    = await db.from('signals').select('*', { count: 'exact', head: true })
-    const { data: proyData }  = await db.from('signals').select('proyecto')
-    const { data: temaData }  = await db.from('signals').select('tema')
-    const { data: stackData } = await db.from('signals').select('stack')
+    const { count: total }    = await db.from('signals').select('*', { count: 'exact', head: true }).neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: proyData }  = await db.from('signals').select('proyecto').neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: temaData }  = await db.from('signals').select('tema').neq('contexto', OVERVIEW_CONTEXTO)
+    const { data: stackData } = await db.from('signals').select('stack').neq('contexto', OVERVIEW_CONTEXTO)
 
     const proyectos = [...new Set((proyData||[]).map(r => r.proyecto))].sort()
     const temas     = [...new Set((temaData||[]).map(r => r.tema))].sort()
