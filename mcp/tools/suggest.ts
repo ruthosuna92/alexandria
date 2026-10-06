@@ -1,10 +1,10 @@
 import { getModelState } from '../lib/signals-repo.js'
 
 const ROUTING_TABLE: Record<string, { modelo: string; razon: string }> = {
-  arquitectura: { modelo: 'claude-opus-4-6',   razon: 'decisiones críticas y diseño de sistemas' },
-  bug:          { modelo: 'claude-sonnet-4-6', razon: 'debugging y análisis primer intento' },
-  feature:      { modelo: 'claude-sonnet-4-6', razon: 'implementación de features nuevas' },
-  planning:     { modelo: 'claude-sonnet-4-6', razon: 'planificación y estrategia' },
+  arquitectura: { modelo: 'claude-opus-5-5',   razon: 'decisiones críticas y diseño de sistemas' },
+  bug:          { modelo: 'claude-sonnet-5-5', razon: 'debugging y análisis primer intento' },
+  feature:      { modelo: 'claude-sonnet-5-5', razon: 'implementación de features nuevas' },
+  planning:     { modelo: 'claude-sonnet-5-5', razon: 'planificación y estrategia' },
   ui:           { modelo: 'gemini-flash',       razon: 'UI repetitiva y boilerplate' },
   otro:         { modelo: 'claude-haiku-4-5',  razon: 'microtareas y clasificación' },
 }

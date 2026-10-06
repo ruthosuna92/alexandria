@@ -24,7 +24,9 @@ type LearningStats = {
 }
 
 const MODEL_COLORS: Record<string, string> = {
-  'claude-sonnet-4-6':'#1D9E75','claude-opus-4-6':'#7F77DD','claude-haiku-4-5':'#BA7517','gemini-flash':'#378ADD'
+  'claude-sonnet-5-5':'#1D9E75','claude-opus-5-5':'#7F77DD','claude-haiku-4-5':'#BA7517','gemini-flash':'#378ADD',
+  // Older model ids still stored on existing signals
+  'claude-sonnet-4-6':'#1D9E75','claude-opus-4-6':'#7F77DD',
 }
 const TEMA_COLORS: Record<string, string> = {
   bug:'#D85A30',feature:'#1D9E75',arquitectura:'#7F77DD',planning:'#378ADD',ui:'#BA7517',otro:'#5a5754'
@@ -237,7 +239,7 @@ export default function Home() {
           <div className={styles.card}>
             <div className={styles.label}>paste your signal json</div>
             <textarea className={styles.textarea} rows={10} value={input} onChange={e => setInput(e.target.value)}
-              placeholder={'{\n  "proyecto": "Spybee",\n  "contexto": "refactor de breadcrumbs",\n  "tema": "feature",\n  "stack": ["Next.js", "TypeScript"],\n  "decisiones": ["usar Zustand en lugar de Redux"],\n  "preferencias": ["solo código que cambió"],\n  "errores_resueltos": [],\n  "modelo_sugerido": "claude-sonnet-4-6",\n  "skill_sugerida": "nextjs.md"\n}'} />
+              placeholder={'{\n  "proyecto": "Spybee",\n  "contexto": "refactor de breadcrumbs",\n  "tema": "feature",\n  "stack": ["Next.js", "TypeScript"],\n  "decisiones": ["usar Zustand en lugar de Redux"],\n  "preferencias": ["solo código que cambió"],\n  "errores_resueltos": [],\n  "modelo_sugerido": "claude-sonnet-5-5",\n  "skill_sugerida": "nextjs.md"\n}'} />
             <div className={styles.row} style={{ marginTop:10, justifyContent:'flex-end' }}>
               <button className={styles.btn} onClick={() => setInput('')}>clear</button>
               <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={saveSignal} disabled={saving}>
@@ -314,7 +316,7 @@ export default function Home() {
           <div className={styles.card}>
             <div className={styles.label}>routing table</div>
             <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
-              {[{model:'claude-opus-4-6',reason:'arquitectura · decisiones críticas · 2 intentos fallidos'},{model:'claude-sonnet-4-6',reason:'features · bugs complejos primer intento'},{model:'gemini-flash',reason:'boilerplate · ui repetitiva · bugs 2do intento'},{model:'claude-haiku-4-5',reason:'microtareas · clasificar · resumir'}].map(({model,reason}) => (
+              {[{model:'claude-opus-5-5',reason:'arquitectura · decisiones críticas · 2 intentos fallidos'},{model:'claude-sonnet-5-5',reason:'features · bugs complejos primer intento'},{model:'gemini-flash',reason:'boilerplate · ui repetitiva · bugs 2do intento'},{model:'claude-haiku-4-5',reason:'microtareas · clasificar · resumir'}].map(({model,reason}) => (
                 <div key={model} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', background:'#1a1a1a', borderRadius:6, border:'0.5px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ width:6, height:6, borderRadius:'50%', background:MODEL_COLORS[model]||'#5a5754', flexShrink:0 }} />
                   <div><div style={{ fontSize:11, color:'#e8e6e1' }}>{model}</div><div style={{ fontSize:10, color:'#5a5754' }}>{reason}</div></div>

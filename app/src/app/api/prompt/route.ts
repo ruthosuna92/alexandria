@@ -18,7 +18,7 @@ export async function GET() {
 
     const BASE_TEMAS   = ['bug', 'feature', 'arquitectura', 'planning', 'ui', 'otro']
     const BASE_SKILLS  = ['nextjs.md', 'plasmo.md', 'supabase.md', 'clerk.md', 'expo.md']
-    const BASE_MODELOS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5', 'gemini-flash']
+    const BASE_MODELOS = ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5', 'gemini-flash']
 
     const allTemas   = [...new Set([...BASE_TEMAS,   ...temas])]
     const allSkills  = [...new Set([...BASE_SKILLS,  ...skills])]

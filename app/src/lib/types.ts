@@ -34,9 +34,9 @@ export interface QueryResult {
 }
 
 export const ROUTING_TABLE = [
-  { model: 'claude-opus-4-6',   color: '#7F77DD', reason: 'arquitectura · decisiones críticas · 2 intentos fallidos' },
-  { model: 'claude-sonnet-4-6', color: '#1D9E75', reason: 'features · bugs complejos primer intento' },
-  { model: 'gemini-2-flash',    color: '#378ADD', reason: 'boilerplate · ui repetitiva · bugs 2do intento' },
+  { model: 'claude-opus-5-5',   color: '#7F77DD', reason: 'arquitectura · decisiones críticas · 2 intentos fallidos' },
+  { model: 'claude-sonnet-5-5', color: '#1D9E75', reason: 'features · bugs complejos primer intento' },
+  { model: 'gemini-flash',      color: '#378ADD', reason: 'boilerplate · ui repetitiva · bugs 2do intento' },
   { model: 'claude-haiku-4-5',  color: '#BA7517', reason: 'microtareas · clasificar · resumir' },
 ]
 

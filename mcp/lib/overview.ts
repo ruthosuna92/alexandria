@@ -37,7 +37,7 @@ export async function generateOverview(proyecto: string) {
   const decisiones        = [...new Set(signals.flatMap(s => s.decisiones || []))]
   const preferencias      = [...new Set(signals.flatMap(s => s.preferencias || []))]
   const errores_resueltos = [...new Set(signals.flatMap(s => s.errores_resueltos || []))]
-  const modelo = mostFrequent(signals.map(s => s.modelo), 'claude-sonnet-4-6')
+  const modelo = mostFrequent(signals.map(s => s.modelo), 'claude-sonnet-5-5')
   const skill  = mostFrequent(signals.map(s => s.skill), 'nextjs.md')
 
   // Project name and "overview" are repeated so this row ranks first for
