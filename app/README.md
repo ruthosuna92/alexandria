@@ -15,7 +15,7 @@ RAG personal para tus conversaciones de IA. Guarda señales de tus chats en Supa
 
 ```bash
 # 1. Crear .env con:
-#    NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY, ALEXANDRIA_API_KEY,
+#    NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY,
 #    ALEXANDRIA_USER y ALEXANDRIA_PASSWORD (login de la app; sin ellas la app responde 500)
 
 # 2. Instalar dependencias

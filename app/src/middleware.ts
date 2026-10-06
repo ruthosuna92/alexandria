@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // Protects every page and API route with HTTP Basic Auth. The browser prompts
 // once and then sends the credentials on every same-origin fetch, so the UI
-// needs no changes. /api/gpt/* is excluded in `config.matcher` because the
-// ChatGPT action authenticates with its own bearer key.
+// needs no changes.
 
 // Edge runtime has no crypto.timingSafeEqual; compare every character so the
 // response time doesn't reveal how much of the password matched.
@@ -55,5 +54,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/gpt/).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
