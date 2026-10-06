@@ -1,6 +1,9 @@
 // prompt/route.ts
 import { NextResponse } from 'next/server'
 import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
+
+// Reads live data; without this Next.js prerenders it once at build time.
+export const dynamic = 'force-dynamic'
 import { getLearnedRouting } from '@/lib/learning'
 
 export async function GET() {

@@ -2,6 +2,9 @@
 import { NextResponse } from 'next/server'
 import { getDb, OVERVIEW_CONTEXTO } from '@/lib/db'
 
+// Reads live data; without this Next.js prerenders it once at build time.
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const db = getDb()

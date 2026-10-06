@@ -11,6 +11,10 @@ let _client: ReturnType<typeof createClient<any>> | null = null
 
 export function getDb() {
   if (_client) return _client
-  _client = createClient(supabaseUrl, supabaseKey)
+  _client = createClient(supabaseUrl, supabaseKey, {
+    // Next.js caches fetch() responses on disk by default, which froze stats
+    // at their build-time values. Alexandria data must always be live.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+  })
   return _client
 }
